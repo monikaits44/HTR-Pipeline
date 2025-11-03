@@ -1,0 +1,43 @@
+# Configuration for HTR with Vision Transformer (ViT-B/16)
+
+# Preprocessing
+preproc:
+  image_height: 128
+  image_width: 1024
+
+# Model Architecture - ViT-B/16
+arch_vit:
+  patch_size: 16
+  embed_dim: 768
+  depth: 12
+  num_heads: 12
+  mlp_ratio: 4.0
+  dropout: 0.1
+  decoder_type: 'rnn'  # Options: 'rnn', 'linear'
+  decoder_hidden: 512
+  decoder_layers: 2
+
+# Dataset
+data:
+  path: ./data/IAM/processed_lines
+  batch_size: 8  # Lower batch size for ViT (higher memory usage)
+  num_workers: 4
+
+# Training
+train:
+  epochs: 50
+  learning_rate: 0.0001  # Lower LR for ViT
+  weight_decay: 0.01
+  scheduler: 'cosine'  # Options: 'cosine', 'step', 'plateau'
+  warmup_epochs: 5
+  gradient_clip: 5.0
+  save_interval: 5
+  log_interval: 10
+
+# Evaluation
+eval:
+  beam_width: 10
+  eval_interval: 1
+
+# Model type identifier (for visualization script)
+model_type: 'vit'

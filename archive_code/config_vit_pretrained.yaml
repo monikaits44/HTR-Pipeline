@@ -1,0 +1,50 @@
+# Configuration for HTR with Pretrained ViT-B/16
+
+# Preprocessing
+preproc:
+  image_height: 128
+  image_width: 1024
+
+# Model Architecture - Pretrained ViT-B/16 from timm
+arch_vit_pretrained:
+  pretrained: true        # Load ImageNet pretrained weights
+  freeze_encoder: false   # Fine-tune encoder (set true for faster training)
+  decoder_type: 'rnn'     # Options: 'rnn', 'linear'
+  decoder_hidden: 512     # RNN hidden size
+  decoder_layers: 2       # RNN layers
+  dropout: 0.1            # Dropout rate
+
+# Dataset
+data:
+  path: ./data/IAM/processed_lines
+  batch_size: 8           # Batch size (reduce if OOM)
+  num_workers: 4
+
+# Training
+train:
+  epochs: 30              # Fewer epochs with pretrained model
+  learning_rate: 0.0001   # Lower LR for fine-tuning
+  weight_decay: 0.01
+  scheduler: 'cosine'
+  warmup_epochs: 3        # Shorter warmup for pretrained
+  gradient_clip: 5.0
+  save_interval: 5
+  log_interval: 10
+  batch_size: 8
+  num_workers: 4
+
+# Evaluation
+eval:
+  beam_width: 10
+  eval_interval: 1
+  batch_size: 8
+  num_workers: 4
+
+# Model type identifier
+model_type: 'vit_pretrained'
+
+# Resume training (optional)
+resume: null
+
+# Device
+device: 'cuda:0'
