@@ -16,16 +16,85 @@ from utils.transforms import aug_transforms
 import torch.nn.functional as F
 
 from utils.metrics import CER, WER
+import json
+import shutil
+from datetime import datetime
+
+
+def get_next_run_number(experiments_dir):
+    """Get the next run number by checking existing run directories."""
+    if not os.path.exists(experiments_dir):
+        return 1
+    
+    existing_runs = [d for d in os.listdir(experiments_dir) if d.startswith('run_')]
+    if not existing_runs:
+        return 1
+    
+    run_numbers = []
+    for run_dir in existing_runs:
+        try:
+            num = int(run_dir.split('_')[1])
+            run_numbers.append(num)
+        except (IndexError, ValueError):
+            continue
+    
+    return max(run_numbers) + 1 if run_numbers else 1
+
+
+def setup_experiment_dir(config):
+    """
+    Create experiment directory structure: saved_models/experiments/run_<n>/
+    Returns the experiment directory path and logging file handle.
+    """
+    base_dir = './saved_models'
+    experiments_dir = os.path.join(base_dir, 'experiments')
+    
+    # Get next run number
+    run_number = get_next_run_number(experiments_dir)
+    run_dir = os.path.join(experiments_dir, f'run_{run_number}')
+    
+    # Create directory structure
+    os.makedirs(run_dir, exist_ok=True)
+    
+    # Save config as JSON
+    config_dict = OmegaConf.to_container(config, resolve=True)
+    config_path = os.path.join(run_dir, 'config.json')
+    with open(config_path, 'w') as f:
+        json.dump(config_dict, f, indent=4)
+    
+    # Create log file
+    log_path = os.path.join(run_dir, 'training.log')
+    log_file = open(log_path, 'w')
+    
+    # Log initial information
+    log_file.write(f"Experiment: run_{run_number}\n")
+    log_file.write(f"Start Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+    log_file.write(f"Configuration saved to: {config_path}\n")
+    log_file.write("="*80 + "\n\n")
+    log_file.flush()
+    
+    return run_dir, log_file, run_number
+
 
 class HTRTrainer(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config, experiment_dir=None, log_file=None, run_number=None):
         super(HTRTrainer, self).__init__()
         self.config = config
+        self.experiment_dir = experiment_dir
+        self.log_file = log_file
+        self.run_number = run_number
 
         self.prepare_dataloaders()
         self.prepare_net()
         self.prepare_losses()
         self.prepare_optimizers()
+    
+    def log(self, message):
+        """Log message to both console and log file."""
+        print(message)
+        if self.log_file:
+            self.log_file.write(message + '\n')
+            self.log_file.flush()
 
 
     def prepare_dataloaders(self):
@@ -38,13 +107,13 @@ class HTRTrainer(nn.Module):
 
         train_set = HTRDataset(dataset_folder, 'train', fixed_size=fixed_size, transforms=aug_transforms)
         classes = train_set.character_classes
-        print('# training lines ' + str(train_set.__len__()))
+        self.log('# training lines ' + str(train_set.__len__()))
 
         val_set = HTRDataset(dataset_folder, 'val', fixed_size=fixed_size, transforms=None)
-        print('# validation lines ' + str(val_set.__len__()))
+        self.log('# validation lines ' + str(val_set.__len__()))
 
         test_set = HTRDataset(dataset_folder, 'test', fixed_size=fixed_size, transforms=None)
-        print('# testing lines ' + str(test_set.__len__()))
+        self.log('# testing lines ' + str(test_set.__len__()))
 
         # augmentation using data sampler
         train_loader = DataLoader(train_set, batch_size=config.train.batch_size, 
@@ -81,23 +150,23 @@ class HTRTrainer(nn.Module):
 
         device = config.device
 
-        print('Preparing Net - Architectural elements:')
-        print(config.arch)
+        self.log('Preparing Net - Architectural elements:')
+        self.log(str(config.arch))
 
         classes = self.classes['classes']
 
         net = HTRNet(config.arch, len(classes) + 1)
         
         if config.resume is not None:
-            print('resuming from checkpoint: {}'.format(config.resume))
+            self.log('resuming from checkpoint: {}'.format(config.resume))
             load_dict = torch.load(config.resume)
             load_status = net.load_state_dict(load_dict, strict=True)
-            print(load_status)
+            self.log(str(load_status))
         net.to(device)
 
         # print number of parameters
         n_params = sum(p.numel() for p in net.parameters() if p.requires_grad)
-        print('Number of parameters: {}'.format(n_params))
+        self.log('Number of parameters: {}'.format(n_params))
 
         self.net = net
 
@@ -142,8 +211,8 @@ class HTRTrainer(nn.Module):
         # remove duplicates
         dec_transcr = self.decode(tdec, self.classes['i2c'])
 
-        print('orig:: ' + transcr.strip())
-        print('pred:: ' + dec_transcr.strip())
+        self.log('orig:: ' + transcr.strip())
+        self.log('pred:: ' + dec_transcr.strip())
 
 
     def train(self, epoch):
@@ -197,7 +266,7 @@ class HTRTrainer(nn.Module):
         else:
             print("not recognized set in test function")
 
-        print('####################### Evaluating {} set at epoch {} #######################'.format(tset, epoch))
+        self.log('####################### Evaluating {} set at epoch {} #######################'.format(tset, epoch))
         
         cer, wer = CER(), WER(mode=config.eval.wer_mode)
         for (imgs, transcrs) in tqdm.tqdm(loader):
@@ -221,18 +290,29 @@ class HTRTrainer(nn.Module):
         cer_score = cer.score()
         wer_score = wer.score()
 
-        print('CER at epoch {}: {:.3f}'.format(epoch, cer_score))
-        print('WER at epoch {}: {:.3f}'.format(epoch, wer_score))
+        self.log('CER at epoch {}: {:.3f}'.format(epoch, cer_score))
+        self.log('WER at epoch {}: {:.3f}'.format(epoch, wer_score))
 
         self.net.train()
+        
+        return cer_score, wer_score
 
     def save(self, epoch):
-        print('####################### Saving model at epoch {} #######################'.format(epoch))
-        if not os.path.exists('./saved_models'):
-            os.makedirs('models')
-
-        torch.save(self.net.cpu().state_dict(), './saved_models/htrnet_{}.pt'.format(epoch))
+        """Save model to experiment directory."""
+        self.log('####################### Saving model at epoch {} #######################'.format(epoch))
+        
+        if self.experiment_dir is None:
+            # Fallback to old behavior if no experiment directory is set
+            if not os.path.exists('./saved_models'):
+                os.makedirs('./saved_models')
+            save_path = './saved_models/htrnet_{}.pt'.format(epoch)
+        else:
+            # Save to experiment directory as model.pt
+            save_path = os.path.join(self.experiment_dir, 'model.pt')
+        
+        torch.save(self.net.cpu().state_dict(), save_path)
         self.net.to(self.config.device)
+        self.log(f'Model saved to: {save_path}')
 
 
 def parse_args():
@@ -251,11 +331,23 @@ if __name__ == '__main__':
     config = parse_args()
     max_epochs = config.train.num_epochs
 
-    htr_trainer = HTRTrainer(config)
+    # Setup experiment directory structure
+    experiment_dir, log_file, run_number = setup_experiment_dir(config)
+    print(f"\n{'='*80}")
+    print(f"Starting Experiment: run_{run_number}")
+    print(f"Experiment Directory: {experiment_dir}")
+    print(f"{'='*80}\n")
+
+    htr_trainer = HTRTrainer(config, experiment_dir, log_file, run_number)
 
     cnt = 1
-    print('Training Started!')
-    htr_trainer.test(0, 'test')
+    htr_trainer.log('Training Started!')
+    cer_score, wer_score = htr_trainer.test(0, 'test')
+    
+    # Track best metrics
+    best_cer = cer_score
+    best_epoch = 0
+    
     for epoch in range(1, max_epochs + 1):
 
         htr_trainer.train(epoch)
@@ -264,10 +356,31 @@ if __name__ == '__main__':
         # save and evaluate the current model
         if epoch % config.train.save_every_k_epochs == 0:
             htr_trainer.save(epoch)
-            htr_trainer.test(epoch, 'val')
-            htr_trainer.test(epoch, 'test')
+            val_cer, val_wer = htr_trainer.test(epoch, 'val')
+            test_cer, test_wer = htr_trainer.test(epoch, 'test')
+            
+            # Track best model
+            if val_cer < best_cer:
+                best_cer = val_cer
+                best_epoch = epoch
+                htr_trainer.log(f'\n*** New best CER: {best_cer:.3f} at epoch {best_epoch} ***\n')
 
-    # save the final model
+    # Save final summary
+    htr_trainer.log("\n" + "="*80)
+    htr_trainer.log("Training Completed!")
+    htr_trainer.log(f"End Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    htr_trainer.log(f"Best Validation CER: {best_cer:.3f} at epoch {best_epoch}")
+    htr_trainer.log(f"Final model saved to: {os.path.join(experiment_dir, 'model.pt')}")
+    htr_trainer.log("="*80)
+    
+    # Close log file
+    if log_file:
+        log_file.close()
+    
+    print(f"\n{'='*80}")
+    print(f"Experiment run_{run_number} completed!")
+    print(f"Results saved in: {experiment_dir}")
+    print(f"{'='*80}\n")
     if not os.path.exists('./saved_models'):
         os.makedirs('./saved_models')
     torch.save(htr_trainer.net.cpu().state_dict(), './saved_models/{}'.format(config.save))

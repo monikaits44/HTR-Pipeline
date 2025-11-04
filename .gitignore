@@ -1,5 +1,18 @@
+# requirements
 requirements.txt
+# prepared data
 data/*
+# actual data
 datasets/IAM/
+# compiled python files
 utils/__pycache__/
 __pycache__/
+# trained models
+saved_models/htrnet.pt
+saved_models/classes.npy
+# training experiment artifacts - log , config and checkpoints
+saved_models/experiments/*
+# virtual environment
+.venv/
+# experiments
+attention_visualizations_test/*
