@@ -1,5 +1,4 @@
 resume:
-save: './temp.pt'
 
 device: 'cpu'
 
