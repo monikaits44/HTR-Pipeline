@@ -496,6 +496,10 @@ if __name__ == '__main__':
     htr_trainer.log(f"Final model saved to: {os.path.join(experiment_dir, 'model.pt')}")
     htr_trainer.log("="*80)
     
+    # Log evaluation details path before closing files
+    if htr_trainer.eval_csv_file:
+        htr_trainer.log(f"Detailed evaluation saved to: {htr_trainer.eval_csv_path}")
+    
     # Close log file
     if log_file:
         log_file.close()
@@ -507,7 +511,6 @@ if __name__ == '__main__':
     # Close evaluation details CSV file
     if htr_trainer.eval_csv_file:
         htr_trainer.eval_csv_file.close()
-        htr_trainer.log(f"Detailed evaluation saved to: {htr_trainer.eval_csv_path}")
     
     print(f"\n{'='*80}")
     print(f"Experiment run_{run_number} completed!")
