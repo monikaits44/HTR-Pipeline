@@ -23,6 +23,8 @@ from utils.metrics import CER, WER
 import json
 import shutil
 from datetime import datetime
+import csv
+import time
 
 
 def get_next_run_number(experiments_dir):
@@ -77,16 +79,71 @@ def setup_experiment_dir(config):
     log_file.write("="*80 + "\n\n")
     log_file.flush()
     
-    return run_dir, log_file, run_number
+    # Create CSV results file with header
+    csv_path = os.path.join(run_dir, 'results.csv')
+    csv_file = open(csv_path, 'w', newline='')
+    csv_writer = csv.writer(csv_file)
+    csv_writer.writerow([
+        'epoch', 'lr', 'train/ctc_loss', 
+        'val/cer', 'val/wer', 
+        'test/cer', 'test/wer',
+        'data/train_lines', 'data/val_lines', 'data/test_lines',
+        'data/train_charset_size', 'data/val_charset_size', 'data/test_charset_size',
+        'model/params', 'time/epoch(s)', 'device', 'seed'
+    ])
+    csv_file.flush()
+    
+    # Create metrics documentation file
+    metrics_doc_path = os.path.join(run_dir, 'metrics_description.txt')
+    with open(metrics_doc_path, 'w') as f:
+        f.write("Metrics Description\n")
+        f.write("="*80 + "\n\n")
+        f.write("Metric          | Purpose                | Algorithm                              | Level     | Library\n")
+        f.write("-"*80 + "\n")
+        f.write("CTC Loss        | Training objective     | Connectionist Temporal Classification  | Sequence  | PyTorch nn.CTCLoss\n")
+        f.write("CER             | Character accuracy     | Levenshtein distance                   | Character | editdistance\n")
+        f.write("WER             | Word accuracy          | Levenshtein distance                   | Word      | editdistance + nltk\n")
+        f.write("\n")
+        f.write("Notes:\n")
+        f.write("- CTC Loss: Used during training with log_softmax, reduction='sum', zero_infinity=True\n")
+        f.write("- CER: Character Error Rate = total_edit_distance / total_characters\n")
+        f.write("- WER: Word Error Rate = total_word_edit_distance / total_words\n")
+        f.write("- Lower values are better for all metrics (0.0 = perfect)\n")
+        f.write("- seed: Random seed (if not set, None or -1 indicates no explicit seed)\n")
+    
+    return run_dir, log_file, run_number, csv_file, csv_writer
+    
+    return run_dir, log_file, run_number, csv_file, csv_writer
 
 
 class HTRTrainer(nn.Module):
-    def __init__(self, config, experiment_dir=None, log_file=None, run_number=None):
+    def __init__(self, config, experiment_dir=None, log_file=None, run_number=None, csv_file=None, csv_writer=None):
         super(HTRTrainer, self).__init__()
         self.config = config
         self.experiment_dir = experiment_dir
         self.log_file = log_file
         self.run_number = run_number
+        self.csv_file = csv_file
+        self.csv_writer = csv_writer
+        
+        # Tracking variables for CSV
+        self.train_losses = []
+        self.epoch_start_time = None
+        self.num_params = 0
+        
+        # Setup detailed evaluation CSV file
+        if experiment_dir is not None:
+            self.eval_csv_path = os.path.join(experiment_dir, 'evaluation_details.csv')
+            self.eval_csv_file = open(self.eval_csv_path, 'w', newline='')
+            self.eval_csv_writer = csv.writer(self.eval_csv_file)
+            self.eval_csv_writer.writerow([
+                'epoch', 'dataset', 'sample_idx', 'ground_truth', 'prediction', 
+                'sample_cer', 'sample_wer', 'gt_length', 'pred_length'
+            ])
+            self.eval_csv_file.flush()
+        else:
+            self.eval_csv_file = None
+            self.eval_csv_writer = None
 
         self.prepare_dataloaders()
         self.prepare_net()
@@ -112,12 +169,17 @@ class HTRTrainer(nn.Module):
         train_set = HTRDataset(dataset_folder, 'train', fixed_size=fixed_size, transforms=aug_transforms)
         classes = train_set.character_classes
         self.log('# training lines ' + str(train_set.__len__()))
+        self.num_train_lines = train_set.__len__()
 
         val_set = HTRDataset(dataset_folder, 'val', fixed_size=fixed_size, transforms=None)
         self.log('# validation lines ' + str(val_set.__len__()))
+        self.num_val_lines = val_set.__len__()
 
         test_set = HTRDataset(dataset_folder, 'test', fixed_size=fixed_size, transforms=None)
         self.log('# testing lines ' + str(test_set.__len__()))
+        self.num_test_lines = test_set.__len__()
+        self.charset_size = len(classes)
+        self.log('charset size: ' + str(self.charset_size))
 
         # augmentation using data sampler
         train_loader = DataLoader(train_set, batch_size=config.train.batch_size, 
@@ -170,6 +232,7 @@ class HTRTrainer(nn.Module):
 
         # print number of parameters
         n_params = sum(p.numel() for p in net.parameters() if p.requires_grad)
+        self.num_params = n_params
         self.log('Number of parameters: {}'.format(n_params))
 
         self.net = net
@@ -225,6 +288,10 @@ class HTRTrainer(nn.Module):
         device = config.device
 
         self.net.train()
+        
+        # Start epoch timer
+        self.epoch_start_time = time.time()
+        self.train_losses = []
 
         t = tqdm.tqdm(self.loaders['train'])
         t.set_description('Epoch {}'.format(epoch))
@@ -248,6 +315,7 @@ class HTRTrainer(nn.Module):
                 loss_val += 0.1 * self.ctc_loss(aux_output, labels, act_lens, label_lens)
 
             tloss_val = loss_val.item()
+            self.train_losses.append(tloss_val)
         
             loss_val.backward()
             self.optimizer.step()    
@@ -273,6 +341,8 @@ class HTRTrainer(nn.Module):
         self.log('####################### Evaluating {} set at epoch {} #######################'.format(tset, epoch))
         
         cer, wer = CER(), WER(mode=config.eval.wer_mode)
+        sample_idx = 0
+        
         for (imgs, transcrs) in tqdm.tqdm(loader):
 
             imgs = imgs.to(device)
@@ -288,8 +358,30 @@ class HTRTrainer(nn.Module):
                 transcr = transcr.strip()
                 dec_transcr = self.decode(tdec, self.classes['i2c']).strip()
 
+                # Calculate per-sample metrics
+                sample_cer_metric = CER()
+                sample_wer_metric = WER(mode=config.eval.wer_mode)
+                sample_cer_metric.update(dec_transcr, transcr)
+                sample_wer_metric.update(dec_transcr, transcr)
+                sample_cer_score = sample_cer_metric.score()
+                sample_wer_score = sample_wer_metric.score()
+                
+                # Log to detailed evaluation CSV
+                if self.eval_csv_writer is not None:
+                    self.eval_csv_writer.writerow([
+                        epoch, tset, sample_idx, transcr, dec_transcr,
+                        sample_cer_score, sample_wer_score,
+                        len(transcr), len(dec_transcr)
+                    ])
+                
+                sample_idx += 1
+                
                 cer.update(dec_transcr, transcr)
                 wer.update(dec_transcr, transcr)
+        
+        # Flush the evaluation CSV after each epoch
+        if self.eval_csv_file is not None:
+            self.eval_csv_file.flush()
         
         cer_score = cer.score()
         wer_score = wer.score()
@@ -336,13 +428,13 @@ if __name__ == '__main__':
     max_epochs = config.train.num_epochs
 
     # Setup experiment directory structure
-    experiment_dir, log_file, run_number = setup_experiment_dir(config)
+    experiment_dir, log_file, run_number, csv_file, csv_writer = setup_experiment_dir(config)
     print(f"\n{'='*80}")
     print(f"Starting Experiment: run_{run_number}")
     print(f"Experiment Directory: {experiment_dir}")
     print(f"{'='*80}\n")
 
-    htr_trainer = HTRTrainer(config, experiment_dir, log_file, run_number)
+    htr_trainer = HTRTrainer(config, experiment_dir, log_file, run_number, csv_file, csv_writer)
 
     cnt = 1
     htr_trainer.log('Training Started!')
@@ -368,6 +460,33 @@ if __name__ == '__main__':
                 best_cer = val_cer
                 best_epoch = epoch
                 htr_trainer.log(f'\n*** New best CER: {best_cer:.3f} at epoch {best_epoch} ***\n')
+            
+            # Write CSV row with all metrics
+            epoch_time = time.time() - htr_trainer.epoch_start_time
+            avg_train_loss = sum(htr_trainer.train_losses) / len(htr_trainer.train_losses) if htr_trainer.train_losses else 0.0
+            current_lr = htr_trainer.optimizer.param_groups[0]['lr']
+            seed_value = config.get('seed', -1)
+            
+            csv_writer.writerow([
+                epoch,
+                current_lr,
+                avg_train_loss,
+                val_cer,
+                val_wer,
+                test_cer,
+                test_wer,
+                htr_trainer.num_train_lines,
+                htr_trainer.num_val_lines,
+                htr_trainer.num_test_lines,
+                htr_trainer.charset_size,
+                htr_trainer.charset_size,
+                htr_trainer.charset_size,
+                htr_trainer.num_params,
+                epoch_time,
+                config.device,
+                seed_value
+            ])
+            csv_file.flush()
 
     # Save final summary
     htr_trainer.log("\n" + "="*80)
@@ -381,9 +500,19 @@ if __name__ == '__main__':
     if log_file:
         log_file.close()
     
+    # Close CSV file
+    if csv_file:
+        csv_file.close()
+    
+    # Close evaluation details CSV file
+    if htr_trainer.eval_csv_file:
+        htr_trainer.eval_csv_file.close()
+        htr_trainer.log(f"Detailed evaluation saved to: {htr_trainer.eval_csv_path}")
+    
     print(f"\n{'='*80}")
     print(f"Experiment run_{run_number} completed!")
     print(f"Results saved in: {experiment_dir}")
+    print(f"Detailed evaluation CSV: {os.path.join(experiment_dir, 'evaluation_details.csv')}")
     print(f"{'='*80}\n")
     # Final model is already saved into the experiment directory as `model.pt`.
     # Remove legacy/global save to `saved_models/<config.save>` to avoid creating
