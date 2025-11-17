@@ -16,3 +16,5 @@ saved_models/experiments/*
 .venv/
 # experiments
 attention_visualizations_test/*
+archive_code/*
+archive_docs/*

@@ -1,0 +1,9 @@
+# architecture
+arch: 
+  cnn_cfg: [[2, 64], 'M', [3, 128], 'M', [2, 256]]
+  head_type: 'both'  # select from 'both' (rnn + cnn shortcut), 'rnn', 'cnn'
+  rnn_type: 'lstm'
+  rnn_layers: 3
+  rnn_hidden_size: 256
+  flattening: 'maxpool'
+  stn: False

@@ -1,0 +1,27 @@
+resume:
+
+device: 'cuda:0'  # select from 'cuda:0', 'cpu'
+
+# datasets
+data:
+  path: './data/IAM/processed_lines'
+
+# preprocessing
+preproc:
+  image_height: 128
+  image_width: 1024
+
+# training
+train:
+  lr: 1e-3
+  num_epochs: 5 # Earlier was 1 for quick testing, 800 for full training  
+  batch_size: 8  # Reduced from 16 to handle memory constraints
+  scheduler: 'mstep'  # right now only 'mstep' is supported, i.e. multistep
+  save_every_k_epochs: 1 # Earlier was 50
+  num_workers: 8
+
+# evaluation
+eval:
+  batch_size: 8  # Reduced from 32 to handle memory constraints
+  num_workers: 8
+  wer_mode: 'tokenizer' # select from 'tokenizer', 'space'

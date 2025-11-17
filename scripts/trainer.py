@@ -116,6 +116,19 @@ def setup_experiment_dir(config):
     return run_dir, log_file, run_number, csv_file, csv_writer
 
 
+class TqdmToLogFile:
+    def __init__(self, log_file):
+        self.log_file = log_file
+
+    def write(self, buf):
+        if buf.strip():  # Only write non-empty lines
+            self.log_file.write(buf)
+            self.log_file.flush()
+            
+    def flush(self):
+        if self.log_file:
+            self.log_file.flush()
+
 class HTRTrainer(nn.Module):
     def __init__(self, config, experiment_dir=None, log_file=None, run_number=None, csv_file=None, csv_writer=None):
         super(HTRTrainer, self).__init__()
@@ -125,6 +138,9 @@ class HTRTrainer(nn.Module):
         self.run_number = run_number
         self.csv_file = csv_file
         self.csv_writer = csv_writer
+        
+        # Create tqdm logger
+        self.tqdm_logger = TqdmToLogFile(log_file) if log_file else None
         
         # Tracking variables for CSV
         self.train_losses = []
@@ -293,7 +309,7 @@ class HTRTrainer(nn.Module):
         self.epoch_start_time = time.time()
         self.train_losses = []
 
-        t = tqdm.tqdm(self.loaders['train'])
+        t = tqdm.tqdm(self.loaders['train'], file=self.tqdm_logger if self.tqdm_logger else None)
         t.set_description('Epoch {}'.format(epoch))
         for iter_idx, (img, transcr) in enumerate(t):
             self.optimizer.zero_grad()
@@ -343,7 +359,7 @@ class HTRTrainer(nn.Module):
         cer, wer = CER(), WER(mode=config.eval.wer_mode)
         sample_idx = 0
         
-        for (imgs, transcrs) in tqdm.tqdm(loader):
+        for (imgs, transcrs) in tqdm.tqdm(loader, file=self.tqdm_logger if self.tqdm_logger else None):
 
             imgs = imgs.to(device)
             with torch.no_grad():
@@ -412,13 +428,16 @@ class HTRTrainer(nn.Module):
 
 
 def parse_args():
+    # Load base config
     conf = OmegaConf.load(sys.argv[1])
+    
+    # Load additional config files if provided
+    for config_file in sys.argv[2:]:
+        if config_file.endswith('.yaml'):
+            additional_conf = OmegaConf.load(config_file)
+            conf = OmegaConf.merge(conf, additional_conf)
 
     OmegaConf.set_struct(conf, True)
-
-    sys.argv = [sys.argv[0]] + sys.argv[2:] # Remove the configuration file name from sys.argv
-
-    conf.merge_with_cli()
     return conf
 
 
@@ -429,10 +448,18 @@ if __name__ == '__main__':
 
     # Setup experiment directory structure
     experiment_dir, log_file, run_number, csv_file, csv_writer = setup_experiment_dir(config)
-    print(f"\n{'='*80}")
-    print(f"Starting Experiment: run_{run_number}")
-    print(f"Experiment Directory: {experiment_dir}")
-    print(f"{'='*80}\n")
+    
+    def log_print(msg):
+        """Helper function to print and log messages"""
+        print(msg)
+        if log_file:
+            log_file.write(msg + '\n')
+            log_file.flush()
+            
+    log_print(f"\n{'='*80}")
+    log_print(f"Starting Experiment: run_{run_number}")
+    log_print(f"Experiment Directory: {experiment_dir}")
+    log_print(f"{'='*80}\n")
 
     htr_trainer = HTRTrainer(config, experiment_dir, log_file, run_number, csv_file, csv_writer)
 
@@ -500,23 +527,22 @@ if __name__ == '__main__':
     if htr_trainer.eval_csv_file:
         htr_trainer.log(f"Detailed evaluation saved to: {htr_trainer.eval_csv_path}")
     
-    # Close log file
+    # Print final summary before closing files
+    log_print(f"\n{'='*80}")
+    log_print(f"Experiment run_{run_number} completed!")
+    log_print(f"Results saved in: {experiment_dir}")
+    log_print(f"Detailed evaluation CSV: {os.path.join(experiment_dir, 'evaluation_details.csv')}")
+    log_print(f"{'='*80}\n")
+    
+    # Now close all files
     if log_file:
         log_file.close()
     
-    # Close CSV file
     if csv_file:
         csv_file.close()
     
-    # Close evaluation details CSV file
     if htr_trainer.eval_csv_file:
         htr_trainer.eval_csv_file.close()
-    
-    print(f"\n{'='*80}")
-    print(f"Experiment run_{run_number} completed!")
-    print(f"Results saved in: {experiment_dir}")
-    print(f"Detailed evaluation CSV: {os.path.join(experiment_dir, 'evaluation_details.csv')}")
-    print(f"{'='*80}\n")
     # Final model is already saved into the experiment directory as `model.pt`.
     # Remove legacy/global save to `saved_models/<config.save>` to avoid creating
     # unexpected files like `saved_models/temp.pt`.
