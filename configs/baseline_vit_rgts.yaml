@@ -1,0 +1,27 @@
+# ViT-RGTS architecture for HTR on IAM
+arch:
+  type: 'vit_rgts'        # NEW: will select ViT-based HTR model later
+
+  # Input resolution used in your pipeline
+  image_height: 128
+  image_width: 1024
+
+  # Patch sizes (16x16 -> 8 x 64 = 512 patches)
+  patch_height: 16
+  patch_width: 16
+
+  # ViT core dimensions
+  dim: 256            # embedding dimension
+  depth: 6            # number of transformer blocks
+  heads: 8
+  mlp_dim: 512
+
+  # Register tokens (from the paper)
+  num_registers: 4
+
+  # Dropouts
+  dropout: 0.1
+  emb_dropout: 0.1
+
+  # Head config for compatibility with existing code
+  head_type: 'rnn'    # <-- used in trainer/demo to decide how to handle outputs
