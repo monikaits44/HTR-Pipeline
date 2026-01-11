@@ -18,3 +18,5 @@ saved_models/experiments/*
 attention_visualizations_test/*
 archive_code/*
 archive_docs/*
+plots/
+problem Statement/*
