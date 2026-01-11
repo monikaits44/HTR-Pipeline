@@ -1,8 +1,8 @@
-# architecture
+# architecture - CNN-RNN with dual head
 arch:
-  type: 'cnn_rnn'               # NEW: explicit model type
+  type: 'cnn_rnn'               # CNN + RNN architecture
   cnn_cfg: [[2, 64], 'M', [3, 128], 'M', [2, 256]]
-  head_type: 'both'             # 'both', 'rnn', 'cnn'
+  head_type: 'both'             # 'both' = CNN shortcut + RNN (paper's contribution)
   rnn_type: 'lstm'
   rnn_layers: 3
   rnn_hidden_size: 256

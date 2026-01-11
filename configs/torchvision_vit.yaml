@@ -1,0 +1,36 @@
+# TorchVision ViT architecture for HTR on IAM
+# Uses pretrained Vision Transformer from torchvision.models
+
+arch:
+  type: 'torchvision_vit'  # TorchVision pretrained ViT
+
+  # Model selection
+  model_name: 'vit_b_16'   # Options: vit_b_16, vit_b_32, vit_l_16, vit_l_32
+  pretrained: True         # Use ImageNet pretrained weights
+
+  # Input resolution
+  image_height: 128
+  image_width: 1024
+
+  # Optional register tokens (0 = no registers, 4 = standard)
+  num_registers: 0         # Can be 0, 2, 4, 8, 16 for experimentation
+
+  # Backbone freezing (useful for transfer learning)
+  freeze_backbone: False   # Set to True to freeze ViT weights during training
+
+  # Head configuration
+  head_type: 'rnn'         # Options: 'cnn' (linear), 'rnn', 'both'
+  rnn_type: 'lstm'         # Options: 'lstm', 'gru'
+  rnn_layers: 3
+  rnn_hidden_size: 256
+
+# Training settings (inherit from base config.yaml)
+# These can override the base config
+train:
+  lr: 5e-5               # Lower learning rate for pretrained model
+  num_epochs: 5          # Testing: 5 epochs to verify code works
+  batch_size: 4          # Larger models need smaller batch size
+
+# Evaluation settings
+eval:
+  batch_size: 4
