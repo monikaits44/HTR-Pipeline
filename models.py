@@ -1,6 +1,10 @@
 import torch.nn as nn
 import torch.nn.functional as F
 import torch
+import math
+import numpy as np
+from einops import rearrange, repeat
+from typing import Optional, Tuple, List
 
 class BasicBlock(nn.Module):
     expansion = 1
@@ -27,7 +31,6 @@ class BasicBlock(nn.Module):
         out += self.shortcut(x)
         out = F.relu(out)
         return out
-
 
 
 class CNN(nn.Module):
@@ -79,11 +82,32 @@ class CTCtopC(nn.Module):
         self.cnn_top = nn.Conv2d(input_size, nclasses, kernel_size=(1, 3), stride=1, padding=(0, 1))
 
     def forward(self, x):
-    
+        # x: [B, C, H, W] where H=1
         x = self.dropout(x)
+        y = self.cnn_top(x)  # [B, nclasses, H, W]
+        y = y.squeeze(2).permute(2, 0, 1)  # [T, B, nclasses]
+        return y
 
-        y = self.cnn_top(x)
-        y = y.permute(2, 3, 0, 1)[0]
+
+class CTCtopLinear(nn.Module):
+    """
+    Linear CTC head for Mamba or other sequence models.
+    Takes [T, B, D] or [B, D, 1, T] and outputs [T, B, nclasses]
+    """
+    def __init__(self, input_size, nclasses, dropout=0.0):
+        super(CTCtopLinear, self).__init__()
+        
+        self.dropout = nn.Dropout(dropout)
+        self.linear = nn.Linear(input_size, nclasses)
+    
+    def forward(self, x):
+        # Handle both formats
+        if x.dim() == 4:  # [B, C, H, W] where H=1
+            x = x.squeeze(2).permute(2, 0, 1)  # [T, B, C]
+        # x is now [T, B, D]
+        
+        x = self.dropout(x)
+        y = self.linear(x)  # [T, B, nclasses]
         return y
 
 
@@ -104,10 +128,15 @@ class CTCtopR(nn.Module):
         self.fnl = nn.Sequential(nn.Dropout(.2), nn.Linear(2 * hidden, nclasses))
 
     def forward(self, x):
-
-        y = x.permute(2, 3, 0, 1)[0]
-        y = self.rec(y)[0]
-        y = self.fnl(y)
+        # x: [B, C, H, W] where H should be 1 for sequence data
+        # Need to reshape to [T, B, C] for RNN
+        
+        # Remove singleton spatial dimension and transpose
+        # [B, C, 1, W] -> [B, C, W] -> [W, B, C]
+        y = x.squeeze(2).permute(2, 0, 1)  # [T, B, C]
+        
+        y = self.rec(y)[0]  # [T, B, 2*hidden]
+        y = self.fnl(y)     # [T, B, nclasses]
 
         return y
 
@@ -132,16 +161,18 @@ class CTCtopB(nn.Module):
         )
 
     def forward(self, x):
+        # RNN path: [B, C, H, W] -> [T, B, C] -> [T, B, nclasses]
+        y = x.squeeze(2).permute(2, 0, 1)  # [T, B, C]
+        y = self.rec(y)[0]  # [T, B, 2*hidden]
+        y = self.fnl(y)     # [T, B, nclasses]
 
-        y = x.permute(2, 3, 0, 1)[0]
-        y = self.rec(y)[0]
-
-        y = self.fnl(y)
+        # CNN shortcut path: [B, C, H, W] -> [T, B, nclasses]
+        cnn_out = self.cnn(x).squeeze(2).permute(2, 0, 1)  # [T, B, nclasses]
 
         if self.training:
-            return y, self.cnn(x).permute(2, 3, 0, 1)[0]
+            return y, cnn_out
         else:
-            return y, self.cnn(x).permute(2, 3, 0, 1)[0]
+            return y, cnn_out
 
 
 class ViTRGTSBackbone(nn.Module):
@@ -296,38 +327,63 @@ class ViTRGTSBackbone(nn.Module):
         token_norms = None
 
         # === MANUAL TRANSFORMER ENCODER STACK ==================================
+        # We need to extract attention weights from each layer
+        # PyTorch's MultiheadAttention doesn't expose q,k,v projections directly
+        # So we'll use a hook-based approach or compute manually
+        
         x_tokens = tokens
-        for layer in self.encoder.layers:
-            # Access internal attention module
-            attn_block = layer.self_attn
-
-            # ---- compute attention manually ----
-            # (batch_first=True)
-            q = attn_block.q_proj(x_tokens)
-            k = attn_block.k_proj(x_tokens)
-            v = attn_block.v_proj(x_tokens)
-
-            B_, S_, D_ = q.shape
-            H = attn_block.num_heads
-            d_head = D_ // H
-
-            q = q.view(B_, S_, H, d_head).transpose(1, 2)   # [B, H, S, Dh]
-            k = k.view(B_, S_, H, d_head).transpose(1, 2)
-            v = v.view(B_, S_, H, d_head).transpose(1, 2)
-
-            attn = torch.matmul(q, k.transpose(-1, -2)) / math.sqrt(d_head)
-            attn = torch.softmax(attn, dim=-1)              # [B, H, S, S]
-
-            attn_maps.append(attn.cpu())
-
-            # usual attention output
-            out = torch.matmul(attn, v)                     # [B, H, S, Dh]
-            out = out.transpose(1, 2).contiguous().view(B_, S_, D_)
-            out = attn_block.out_proj(out)
-
-            # full layer: norm-first encoder
-            x_tokens = x_tokens + out
-            x_tokens = x_tokens + layer.linear2(layer.dropout(layer.activation(layer.linear1(layer.norm2(x_tokens)))))
+        for layer_idx, layer in enumerate(self.encoder.layers):
+            # Get the attention module
+            attn_module = layer.self_attn
+            
+            # Manually compute attention for explainability
+            # Extract weights from the attention module
+            embed_dim = attn_module.embed_dim
+            num_heads = attn_module.num_heads
+            head_dim = embed_dim // num_heads
+            
+            # Apply input projection (in_proj contains Q, K, V weights)
+            if attn_module._qkv_same_embed_dim:
+                # Single weight matrix for Q, K, V
+                q, k, v = torch.nn.functional.linear(
+                    x_tokens, attn_module.in_proj_weight, attn_module.in_proj_bias
+                ).chunk(3, dim=-1)
+            else:
+                # Separate Q, K, V projections
+                q = torch.nn.functional.linear(x_tokens, attn_module.q_proj_weight, attn_module.in_proj_bias[:embed_dim])
+                k = torch.nn.functional.linear(x_tokens, attn_module.k_proj_weight, attn_module.in_proj_bias[embed_dim:2*embed_dim])
+                v = torch.nn.functional.linear(x_tokens, attn_module.v_proj_weight, attn_module.in_proj_bias[2*embed_dim:])
+            
+            B_, S_, E_ = q.shape
+            
+            # Reshape for multi-head attention: [B, S, E] -> [B, H, S, D_h]
+            q = q.view(B_, S_, num_heads, head_dim).transpose(1, 2)
+            k = k.view(B_, S_, num_heads, head_dim).transpose(1, 2)
+            v = v.view(B_, S_, num_heads, head_dim).transpose(1, 2)
+            
+            # Compute attention scores
+            attn_weights = torch.matmul(q, k.transpose(-1, -2)) / math.sqrt(head_dim)
+            attn_weights = torch.softmax(attn_weights, dim=-1)  # [B, H, S, S]
+            
+            attn_maps.append(attn_weights.cpu())
+            
+            # Apply attention to values
+            attn_output = torch.matmul(attn_weights, v)  # [B, H, S, D_h]
+            attn_output = attn_output.transpose(1, 2).contiguous().view(B_, S_, E_)
+            
+            # Apply output projection
+            attn_output = torch.nn.functional.linear(
+                attn_output, attn_module.out_proj.weight, attn_module.out_proj.bias
+            )
+            
+            # Apply residual connection and layer norm (norm-first)
+            x_tokens = layer.norm1(x_tokens)
+            x_tokens = x_tokens + attn_output
+            
+            # Feed-forward network
+            x_tokens = layer.norm2(x_tokens)
+            ff_output = layer.linear2(layer.dropout(layer.activation(layer.linear1(x_tokens))))
+            x_tokens = x_tokens + ff_output
 
         # === SPLIT REGISTERS & PATCH TOKENS =====================================
         reg_out = x_tokens[:, :self.num_registers, :]            # [B, R, D]
@@ -342,12 +398,461 @@ class ViTRGTSBackbone(nn.Module):
         return seq_tokens, reg_out, attn_maps, token_norms, (Hp, Wp)
 
 
+class TorchVisionViTBackbone(nn.Module):
+    """
+    Wrapper for TorchVision's pretrained ViT models (e.g., vit_b_16).
+    
+    Adapts the standard ImageNet-pretrained ViT for HTR by:
+    - Converting grayscale to RGB (channel expansion)
+    - Extracting patch tokens (excluding CLS token)
+    - Optionally adding register tokens for better attention maps
+    
+    Input:  x : [B, 1, H, W]  (grayscale line image)
+    Output: seq_tokens : [T, B, D]  (patch tokens for CTC)
+            cls_token  : [B, D]     (CLS token for analysis)
+            grid_size  : (Hp, Wp)   (patch grid)
+    """
+    
+    def __init__(
+        self,
+        model_name: str = "vit_b_16",
+        pretrained: bool = True,
+        num_registers: int = 0,  # Optional register tokens
+        freeze_backbone: bool = False,
+        image_height: int = 128,
+        image_width: int = 1024,
+    ):
+        super().__init__()
+        
+        try:
+            from torchvision.models import get_model
+            from torchvision.models.vision_transformer import VisionTransformer
+        except ImportError:
+            raise ImportError(
+                "TorchVision not found. Install with: pip install torchvision"
+            )
+        
+        # Set up local cache directory for pretrained models
+        import os
+        cache_dir = os.path.abspath(os.path.join(
+            os.path.dirname(__file__), 
+            'pretrained_models', 
+            'torchvision'
+        ))
+        os.makedirs(cache_dir, exist_ok=True)
+        
+        # Load pretrained model with local caching
+        if pretrained:
+            # Check if model exists locally
+            local_model_path = os.path.join(cache_dir, f"{model_name}.pth")
+            
+            if os.path.exists(local_model_path):
+                print(f"Loading {model_name} from local cache: {local_model_path}")
+                self.vit = get_model(model_name, weights=None)
+                state_dict = torch.load(local_model_path, map_location='cpu')
+                self.vit.load_state_dict(state_dict)
+            else:
+                print(f"Downloading {model_name} and caching to: {local_model_path}")
+                self.vit = get_model(model_name, weights="DEFAULT")
+                # Save to local cache
+                torch.save(self.vit.state_dict(), local_model_path)
+                print(f"Model cached successfully")
+        else:
+            self.vit = get_model(model_name, weights=None)
+        
+        if not isinstance(self.vit, VisionTransformer):
+            raise ValueError(f"{model_name} is not a Vision Transformer model")
+        
+        # Get model dimensions
+        self.embed_dim = self.vit.hidden_dim
+        self.patch_size = self.vit.patch_size
+        self.num_registers = num_registers
+        self.image_height = image_height
+        self.image_width = image_width
+        
+        # Calculate grid size
+        self.grid_h = image_height // self.patch_size
+        self.grid_w = image_width // self.patch_size
+        
+        # Grayscale to RGB conversion (ViT expects 3 channels)
+        self.gray_to_rgb = nn.Conv2d(1, 3, 1, bias=False)
+        # Initialize to replicate grayscale across channels
+        with torch.no_grad():
+            self.gray_to_rgb.weight.fill_(1.0)
+        
+        # Optional: Register tokens (inspired by ViT-RGTS)
+        if num_registers > 0:
+            self.register_tokens = nn.Parameter(
+                torch.zeros(1, num_registers, self.embed_dim)
+            )
+            nn.init.normal_(self.register_tokens, std=0.02)
+        
+        # Optionally freeze the backbone
+        if freeze_backbone:
+            for param in self.vit.parameters():
+                param.requires_grad = False
+    
+    def forward(self, x):
+        """
+        x: [B, 1, H, W]
+        returns:
+            seq_tokens: [T, B, D]   (for CTC head)
+            cls_token:  [B, D]      (for analysis)
+            grid_size:  (Hp, Wp)
+        """
+        B, C, H, W = x.shape
+        assert C == 1, f"Expected grayscale input (C=1), got C={C}"
+        
+        # Convert grayscale to RGB
+        x_rgb = self.gray_to_rgb(x)  # [B, 3, H, W]
+        
+        # Resize if needed
+        if H != self.image_height or W != self.image_width:
+            x_rgb = F.interpolate(
+                x_rgb, size=(self.image_height, self.image_width),
+                mode='bilinear', align_corners=False
+            )
+        
+        # Extract features from ViT encoder
+        # Forward through patch embedding
+        x_patch = self.vit.conv_proj(x_rgb)  # [B, D, Hp, Wp]
+        B, D, Hp, Wp = x_patch.shape
+        
+        # Flatten patches
+        patch_tokens = x_patch.flatten(2).transpose(1, 2)  # [B, Np, D]
+        
+        # Add class token
+        cls_tokens = self.vit.class_token.expand(B, -1, -1)  # [B, 1, D]
+        
+        # Optionally add register tokens
+        if self.num_registers > 0:
+            reg_tokens = self.register_tokens.expand(B, -1, -1)  # [B, R, D]
+            tokens = torch.cat([cls_tokens, reg_tokens, patch_tokens], dim=1)
+        else:
+            tokens = torch.cat([cls_tokens, patch_tokens], dim=1)
+        
+        # Handle positional encoding - resize if needed
+        S = tokens.size(1)
+        pos_embed_size = self.vit.encoder.pos_embedding.size(1)
+        
+        if S != pos_embed_size:
+            # Need to interpolate positional embeddings
+            # pos_embedding shape: [1, N_original, D]
+            pos_embed = self.vit.encoder.pos_embedding
+            
+            # Extract CLS token positional embedding
+            cls_pos = pos_embed[:, 0:1, :]  # [1, 1, D]
+            
+            # Get patch positional embeddings (skip CLS)
+            patch_pos = pos_embed[:, 1:, :]  # [1, N_original-1, D]
+            
+            # Calculate original grid size from pretrained ViT
+            N_original_patches = pos_embed_size - 1
+            orig_size = int(N_original_patches ** 0.5)
+            
+            # Reshape to 2D grid for interpolation
+            patch_pos = patch_pos.reshape(1, orig_size, orig_size, self.embed_dim)
+            patch_pos = patch_pos.permute(0, 3, 1, 2)  # [1, D, H_orig, W_orig]
+            
+            # Interpolate to new grid size
+            patch_pos = F.interpolate(
+                patch_pos, 
+                size=(Hp, Wp), 
+                mode='bicubic', 
+                align_corners=False
+            )
+            
+            # Reshape back to sequence
+            patch_pos = patch_pos.permute(0, 2, 3, 1)  # [1, Hp, Wp, D]
+            patch_pos = patch_pos.reshape(1, Hp * Wp, self.embed_dim)  # [1, Np, D]
+            
+            # Reconstruct positional embedding with registers if needed
+            if self.num_registers > 0:
+                # Create zero positional embeddings for register tokens
+                reg_pos = torch.zeros(1, self.num_registers, self.embed_dim, device=patch_pos.device)
+                pos_embedding = torch.cat([cls_pos, reg_pos, patch_pos], dim=1)
+            else:
+                pos_embedding = torch.cat([cls_pos, patch_pos], dim=1)
+        else:
+            pos_embedding = self.vit.encoder.pos_embedding
+        
+        tokens = tokens + pos_embedding
+        tokens = self.vit.encoder.dropout(tokens)
+        
+        # Forward through transformer encoder
+        encoded = self.vit.encoder.layers(tokens)  # [B, S, D]
+        encoded = self.vit.encoder.ln(encoded)
+        
+        # Split tokens
+        cls_out = encoded[:, 0, :]  # [B, D]
+        
+        if self.num_registers > 0:
+            # Skip CLS + registers to get patch tokens
+            patch_out = encoded[:, 1 + self.num_registers:, :]  # [B, Np, D]
+        else:
+            patch_out = encoded[:, 1:, :]  # [B, Np, D]
+        
+        # Convert to [T, B, D] for CTC
+        seq_tokens = patch_out.transpose(0, 1)  # [Np, B, D]
+        
+        return seq_tokens, cls_out, (Hp, Wp)
+    
+    @torch.no_grad()
+    def forward_explain(self, x):
+        """
+        Extended forward pass with attention maps for explainability.
+        """
+        B, C, H, W = x.shape
+        
+        # Convert and resize
+        x_rgb = self.gray_to_rgb(x)
+        if H != self.image_height or W != self.image_width:
+            x_rgb = F.interpolate(
+                x_rgb, size=(self.image_height, self.image_width),
+                mode='bilinear', align_corners=False
+            )
+        
+        # Patch embedding
+        x_patch = self.vit.conv_proj(x_rgb)
+        B, D, Hp, Wp = x_patch.shape
+        patch_tokens = x_patch.flatten(2).transpose(1, 2)
+        
+        # Prepare tokens
+        cls_tokens = self.vit.class_token.expand(B, -1, -1)
+        if self.num_registers > 0:
+            reg_tokens = self.register_tokens.expand(B, -1, -1)
+            tokens = torch.cat([cls_tokens, reg_tokens, patch_tokens], dim=1)
+        else:
+            tokens = torch.cat([cls_tokens, patch_tokens], dim=1)
+        
+        # Handle positional encoding - resize if needed (same as forward method)
+        S = tokens.size(1)
+        pos_embed_size = self.vit.encoder.pos_embedding.size(1)
+        
+        if S != pos_embed_size:
+            pos_embed = self.vit.encoder.pos_embedding
+            cls_pos = pos_embed[:, 0:1, :]
+            patch_pos = pos_embed[:, 1:, :]
+            
+            N_original_patches = pos_embed_size - 1
+            orig_size = int(N_original_patches ** 0.5)
+            
+            patch_pos = patch_pos.reshape(1, orig_size, orig_size, self.embed_dim)
+            patch_pos = patch_pos.permute(0, 3, 1, 2)
+            
+            patch_pos = F.interpolate(
+                patch_pos, size=(Hp, Wp), mode='bicubic', align_corners=False
+            )
+            
+            patch_pos = patch_pos.permute(0, 2, 3, 1)
+            patch_pos = patch_pos.reshape(1, Hp * Wp, self.embed_dim)
+            
+            if self.num_registers > 0:
+                reg_pos = torch.zeros(1, self.num_registers, self.embed_dim, device=patch_pos.device)
+                pos_embedding = torch.cat([cls_pos, reg_pos, patch_pos], dim=1)
+            else:
+                pos_embedding = torch.cat([cls_pos, patch_pos], dim=1)
+        else:
+            pos_embedding = self.vit.encoder.pos_embedding
+        
+        tokens = tokens + pos_embedding
+        tokens = self.vit.encoder.dropout(tokens)
+        
+        # Collect attention maps from each layer
+        attn_maps = []
+        x_tokens = tokens
+        
+        for layer in self.vit.encoder.layers.layers:
+            # Extract attention weights manually
+            attn_output, attn_weights = layer.self_attention(
+                layer.ln_1(x_tokens), 
+                need_weights=True, 
+                average_attn_weights=False
+            )
+            attn_maps.append(attn_weights.cpu())
+            
+            # Complete the transformer block
+            x_tokens = x_tokens + attn_output
+            x_tokens = x_tokens + layer.mlp(layer.ln_2(x_tokens))
+        
+        encoded = self.vit.encoder.ln(x_tokens)
+        
+        # Split tokens
+        cls_out = encoded[:, 0, :]
+        if self.num_registers > 0:
+            reg_out = encoded[:, 1:1+self.num_registers, :]
+            patch_out = encoded[:, 1+self.num_registers:, :]
+        else:
+            reg_out = None
+            patch_out = encoded[:, 1:, :]
+        
+        seq_tokens = patch_out.transpose(0, 1)
+        token_norms = encoded.norm(dim=-1).cpu()
+        
+        return seq_tokens, cls_out, reg_out, attn_maps, token_norms, (Hp, Wp)
+
+
+class TrOCREncoderBackbone(nn.Module):
+    """
+    Wrapper for TrOCR encoder from HuggingFace transformers.
+    
+    TrOCR uses a ViT encoder + Transformer decoder architecture.
+    For HTR with CTC, we only use the encoder part.
+    
+    Input:  x : [B, 1, H, W]  (grayscale line image)
+    Output: seq_tokens : [T, B, D]  (patch tokens for CTC)
+            grid_size  : (Hp, Wp)   (patch grid)
+    """
+    
+    def __init__(
+        self,
+        model_name: str = "microsoft/trocr-base-handwritten",
+        freeze_encoder: bool = False,
+        image_height: int = 384,
+        image_width: int = 384,
+    ):
+        super().__init__()
+        
+        try:
+            from transformers import TrOCRProcessor, VisionEncoderDecoderModel
+        except ImportError:
+            raise ImportError(
+                "Transformers not found. Install with: pip install transformers"
+            )
+        
+        # Set up local cache directory for pretrained models
+        import os
+        cache_dir = os.path.abspath(os.path.join(
+            os.path.dirname(__file__), 
+            'pretrained_models', 
+            'transformers'
+        ))
+        os.makedirs(cache_dir, exist_ok=True)
+        
+        # Load pretrained TrOCR model with local caching
+        print(f"Loading TrOCR model: {model_name}")
+        print(f"Cache directory: {cache_dir}")
+        
+        # HuggingFace transformers automatically caches, but we set explicit cache dir
+        self.model = VisionEncoderDecoderModel.from_pretrained(
+            model_name,
+            cache_dir=cache_dir
+        )
+        self.processor = TrOCRProcessor.from_pretrained(
+            model_name,
+            cache_dir=cache_dir
+        )
+        
+        print(f"TrOCR model loaded successfully")
+        
+        # Extract encoder only
+        self.encoder = self.model.encoder
+        self.embed_dim = self.encoder.config.hidden_size
+        
+        # Image preprocessing parameters
+        self.image_height = image_height
+        self.image_width = image_width
+        
+        # Grayscale to RGB conversion
+        self.gray_to_rgb = nn.Conv2d(1, 3, 1, bias=False)
+        with torch.no_grad():
+            self.gray_to_rgb.weight.fill_(1.0)
+        
+        # Calculate patch grid (TrOCR uses 16x16 patches)
+        self.patch_size = 16
+        self.grid_h = image_height // self.patch_size
+        self.grid_w = image_width // self.patch_size
+        
+        # Optionally freeze encoder
+        if freeze_encoder:
+            for param in self.encoder.parameters():
+                param.requires_grad = False
+    
+    def forward(self, x):
+        """
+        x: [B, 1, H, W]
+        returns:
+            seq_tokens: [T, B, D]   (for CTC head)
+            grid_size:  (Hp, Wp)
+        """
+        B, C, H, W = x.shape
+        assert C == 1, f"Expected grayscale input (C=1), got C={C}"
+        
+        # Convert to RGB
+        x_rgb = self.gray_to_rgb(x)  # [B, 3, H, W]
+        
+        # Resize to TrOCR's expected input size
+        if H != self.image_height or W != self.image_width:
+            x_rgb = F.interpolate(
+                x_rgb, size=(self.image_height, self.image_width),
+                mode='bilinear', align_corners=False
+            )
+        
+        # Normalize (TrOCR expects normalized inputs)
+        mean = torch.tensor([0.5, 0.5, 0.5], device=x.device).view(1, 3, 1, 1)
+        std = torch.tensor([0.5, 0.5, 0.5], device=x.device).view(1, 3, 1, 1)
+        x_rgb = (x_rgb - mean) / std
+        
+        # Forward through encoder
+        encoder_outputs = self.encoder(pixel_values=x_rgb)
+        hidden_states = encoder_outputs.last_hidden_state  # [B, S, D]
+        
+        # TrOCR encoder includes CLS token, remove it
+        # Shape: [B, 1 + Hp*Wp, D] -> [B, Hp*Wp, D]
+        seq_tokens = hidden_states[:, 1:, :]  # Skip CLS token
+        
+        # Convert to [T, B, D] for CTC
+        seq_tokens = seq_tokens.transpose(0, 1)  # [T, B, D]
+        
+        return seq_tokens, (self.grid_h, self.grid_w)
+    
+    @torch.no_grad()
+    def forward_explain(self, x):
+        """
+        Extended forward pass with attention from all layers.
+        """
+        B, C, H, W = x.shape
+        
+        # Preprocess
+        x_rgb = self.gray_to_rgb(x)
+        if H != self.image_height or W != self.image_width:
+            x_rgb = F.interpolate(
+                x_rgb, size=(self.image_height, self.image_width),
+                mode='bilinear', align_corners=False
+            )
+        
+        mean = torch.tensor([0.5, 0.5, 0.5], device=x.device).view(1, 3, 1, 1)
+        std = torch.tensor([0.5, 0.5, 0.5], device=x.device).view(1, 3, 1, 1)
+        x_rgb = (x_rgb - mean) / std
+        
+        # Forward with attention output
+        encoder_outputs = self.encoder(
+            pixel_values=x_rgb,
+            output_attentions=True,
+            return_dict=True
+        )
+        
+        hidden_states = encoder_outputs.last_hidden_state
+        attn_maps = [attn.cpu() for attn in encoder_outputs.attentions]
+        
+        # Extract tokens
+        cls_token = hidden_states[:, 0, :]  # [B, D]
+        seq_tokens = hidden_states[:, 1:, :].transpose(0, 1)  # [T, B, D]
+        
+        # Token norms
+        token_norms = hidden_states.norm(dim=-1).cpu()  # [B, S]
+        
+        return seq_tokens, cls_token, attn_maps, token_norms, (self.grid_h, self.grid_w)
+
 
 class HTRNet(nn.Module):
     """
     Unified entry point for:
-      - CNN+RNN (original Best Practices model): arch_cfg.type == 'cnn_rnn'
-      - ViT+Registers backbone (this work):     arch_cfg.type == 'vit_rgts'
+      - CNN+RNN (original Best Practices model):   arch_cfg.type == 'cnn_rnn'
+      - ViT+Registers backbone (this work):        arch_cfg.type == 'vit_rgts'
+      - TorchVision ViT backbone:                  arch_cfg.type == 'torchvision_vit'
+      - TrOCR encoder backbone:                    arch_cfg.type == 'trocr'
+      - CNN+Mamba (state space model):             arch_cfg.type == 'cnn_mamba'
 
     Forward always returns:
         - logits: [T, B, nclasses]   (CTC-ready)
@@ -478,7 +983,82 @@ class HTRNet(nn.Module):
                     nclasses,
                     rnn_type=arch_cfg.rnn_type,
                 )
-
+        
+        # ------------------------------------------------------------------
+        # 3) TorchVision ViT path  (pretrained ViT from torchvision)
+        # ------------------------------------------------------------------
+        elif self.arch_type == "torchvision_vit":
+            image_height = getattr(arch_cfg, "image_height", 128)
+            image_width = getattr(arch_cfg, "image_width", 1024)
+            model_name = getattr(arch_cfg, "model_name", "vit_b_16")
+            pretrained = getattr(arch_cfg, "pretrained", True)
+            num_registers = getattr(arch_cfg, "num_registers", 0)
+            freeze_backbone = getattr(arch_cfg, "freeze_backbone", False)
+            
+            self.backbone = TorchVisionViTBackbone(
+                model_name=model_name,
+                pretrained=pretrained,
+                num_registers=num_registers,
+                freeze_backbone=freeze_backbone,
+                image_height=image_height,
+                image_width=image_width,
+            )
+            
+            hidden = self.backbone.embed_dim
+            head = getattr(arch_cfg, "head_type", "rnn")
+            
+            if head == "cnn":
+                self.top = CTCtopC(hidden, nclasses)
+            elif head == "both":
+                self.top = CTCtopB(
+                    hidden,
+                    (arch_cfg.rnn_hidden_size, arch_cfg.rnn_layers),
+                    nclasses,
+                    rnn_type=arch_cfg.rnn_type,
+                )
+            else:
+                self.top = CTCtopR(
+                    hidden,
+                    (arch_cfg.rnn_hidden_size, arch_cfg.rnn_layers),
+                    nclasses,
+                    rnn_type=arch_cfg.rnn_type,
+                )
+        
+        # ------------------------------------------------------------------
+        # 4) TrOCR encoder path  (TrOCR from HuggingFace)
+        # ------------------------------------------------------------------
+        elif self.arch_type == "trocr":
+            model_name = getattr(arch_cfg, "model_name", "microsoft/trocr-base-handwritten")
+            freeze_encoder = getattr(arch_cfg, "freeze_encoder", False)
+            image_height = getattr(arch_cfg, "image_height", 384)
+            image_width = getattr(arch_cfg, "image_width", 384)
+            
+            self.backbone = TrOCREncoderBackbone(
+                model_name=model_name,
+                freeze_encoder=freeze_encoder,
+                image_height=image_height,
+                image_width=image_width,
+            )
+            
+            hidden = self.backbone.embed_dim
+            head = getattr(arch_cfg, "head_type", "rnn")
+            
+            if head == "cnn":
+                self.top = CTCtopC(hidden, nclasses)
+            elif head == "both":
+                self.top = CTCtopB(
+                    hidden,
+                    (arch_cfg.rnn_hidden_size, arch_cfg.rnn_layers),
+                    nclasses,
+                    rnn_type=arch_cfg.rnn_type,
+                )
+            else:
+                self.top = CTCtopR(
+                    hidden,
+                    (arch_cfg.rnn_hidden_size, arch_cfg.rnn_layers),
+                    nclasses,
+                    rnn_type=arch_cfg.rnn_type,
+                )
         else:
             raise ValueError(f"Unknown architecture type: {self.arch_type}")
 
@@ -495,7 +1075,7 @@ class HTRNet(nn.Module):
 
         if self.arch_type == "cnn_rnn":
             # CNN features already return [T, B, C]
-            seq = self.features(x)      # [T, B, C]
+            seq = self.features(x)      # [B, C, H=1, W]
             logits = self.top(seq)      # [T, B, nclasses]
             return logits
 
@@ -508,24 +1088,82 @@ class HTRNet(nn.Module):
             # ViT output is [T, B, D] -> [B, D, 1, T]
             seq_4d = seq_tokens.permute(1, 2, 0).unsqueeze(2)      # [B, D, 1, T]
 
-            logits = self.top(seq_4d)                              # [T, B, nclasses] or (T,B,nclasses,aux)
+            logits = self.top(seq_4d)                              # [T, B, nclasses]
+            return logits
+        
+        elif self.arch_type == "torchvision_vit":
+            # TorchVision ViT backbone returns [T, B, D]
+            seq_tokens, cls_token, grid_size = self.backbone(x)    # [T, B, D]
+            
+            # Adapt to 4D format for CTC head
+            seq_4d = seq_tokens.permute(1, 2, 0).unsqueeze(2)      # [B, D, 1, T]
+            
+            logits = self.top(seq_4d)                              # [T, B, nclasses]
+            return logits
+        
+        elif self.arch_type == "trocr":
+            # TrOCR encoder returns [T, B, D]
+            seq_tokens, grid_size = self.backbone(x)               # [T, B, D]
+            
+            # Adapt to 4D format for CTC head
+            seq_4d = seq_tokens.permute(1, 2, 0).unsqueeze(2)      # [B, D, 1, T]
+            
+            logits = self.top(seq_4d)                              # [T, B, nclasses]
             return logits
 
-            raise ValueError(f"Unknown architecture type at forward: {self.arch_type}")
+        elif self.arch_type == "cnn_mamba":
+            # CNN feature extraction
+            cnn_out = self.features(x)      # [B, C, H=1, W]
+            
+            # Reshape to sequence: [B, C, 1, W] -> [B, C, W] -> [W, B, C]
+            seq = cnn_out.squeeze(2).permute(2, 0, 1)  # [T, B, C]
+            
+            # Project to Mamba dimension if needed
+            if hasattr(self, 'cnn_to_mamba'):
+                # [T, B, C] -> [T, B, D]
+                seq = self.cnn_to_mamba(seq)
+            
+            # Mamba sequence modeling: [T, B, D] -> [T, B, D]
+            seq = self.mamba(seq)
+            
+            # CTC head: [T, B, D] -> [T, B, nclasses]
+            logits = self.top(seq)
+            return logits
 
     @torch.no_grad()
     def forward_explain(self, x):
         """
         Returns logits + attention + registers + norms for analysis
+        Supports: vit_rgts, torchvision_vit, trocr
         """
-        if self.arch_type != "vit_rgts":
-            raise ValueError("forward_explain only supported for vit_rgts")
+        if self.arch_type == "vit_rgts":
+            seq_tokens, reg_tokens, attn_maps, token_norms, grid = self.backbone.forward_explain(x)
 
-        seq_tokens, reg_tokens, attn_maps, token_norms, grid = self.backbone.forward_explain(x)
+            # reshape seq_tokens to 4D for the top head
+            seq_4d = seq_tokens.permute(1, 2, 0).unsqueeze(2)  # [B, D, 1, T]
+            logits = self.top(seq_4d)  # [T, B, C]
 
-        # reshape seq_tokens to 4D for the top head
-        seq_4d = seq_tokens.permute(1, 2, 0).unsqueeze(2)  # [B, D, 1, T]
-        logits = self.top(seq_4d)  # [T, B, C]
-
-        return logits, reg_tokens, attn_maps, token_norms, grid
+            return logits, reg_tokens, attn_maps, token_norms, grid
+        
+        elif self.arch_type == "torchvision_vit":
+            seq_tokens, cls_token, reg_tokens, attn_maps, token_norms, grid = self.backbone.forward_explain(x)
+            
+            # reshape seq_tokens to 4D for the top head
+            seq_4d = seq_tokens.permute(1, 2, 0).unsqueeze(2)  # [B, D, 1, T]
+            logits = self.top(seq_4d)  # [T, B, C]
+            
+            return logits, reg_tokens, attn_maps, token_norms, grid
+        
+        elif self.arch_type == "trocr":
+            seq_tokens, cls_token, attn_maps, token_norms, grid = self.backbone.forward_explain(x)
+            
+            # reshape seq_tokens to 4D for the top head
+            seq_4d = seq_tokens.permute(1, 2, 0).unsqueeze(2)  # [B, D, 1, T]
+            logits = self.top(seq_4d)  # [T, B, C]
+            
+            # TrOCR doesn't have register tokens, return None for compatibility
+            return logits, None, attn_maps, token_norms, grid
+        
+        else:
+            raise ValueError(f"forward_explain not supported for architecture: {self.arch_type}")
 
