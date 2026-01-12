@@ -309,12 +309,12 @@ class HTRTrainer(nn.Module):
             # Fix: Encode each sample's labels separately, then concatenate
             # CTC expects: concatenated labels for entire batch, with label_lens tracking boundaries
             batch_labels = []
-            for t in transcr:
-                sample_labels = [self.classes['c2i'][c] for c in t]
+            for transcript in transcr:
+                sample_labels = [self.classes['c2i'][c] for c in transcript]
                 batch_labels.extend(sample_labels)
             
             labels = torch.IntTensor(batch_labels).to(device)
-            label_lens = torch.IntTensor([len(t) for t in transcr]).to(device)
+            label_lens = torch.IntTensor([len(transcript) for transcript in transcr]).to(device)
 
             loss_val = self.ctc_loss(output, labels, act_lens, label_lens)
 
