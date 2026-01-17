@@ -7,8 +7,8 @@ arch:
   image_width: 1024
 
   # Patch sizes (16x16 -> 8 x 64 = 512 patches)
-  patch_height: 16
-  patch_width: 16
+  patch_height: 4
+  patch_width: 64
 
   # ViT core dimensions
   dim: 256            # embedding dimension
@@ -17,7 +17,7 @@ arch:
   mlp_dim: 512
 
   # Register tokens (from the paper - key innovation!)
-  num_registers: 4  # 4 register tokens for global information aggregation
+  num_registers: 0  # 4 register tokens for global information aggregation
 
   # Dropouts
   dropout: 0.1
@@ -31,5 +31,5 @@ arch:
 
 # Training settings
 train:
-  num_epochs: 5       # Testing: 5 epochs for register comparison
+  num_epochs: 100       # Testing: 5 epochs for register comparison
   batch_size: 8
