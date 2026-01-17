@@ -46,7 +46,7 @@ def download_trocr(model_name='microsoft/trocr-base-handwritten'):
     """Download and cache TrOCR model."""
     from transformers import VisionEncoderDecoderModel, TrOCRProcessor
     
-    cache_dir = PROJECT_ROOT / 'pretrained_models' / 'transformers'
+    cache_dir = PROJECT_ROOT / 'pretrained_models' / 'trocr'
     cache_dir.mkdir(parents=True, exist_ok=True)
     
     print(f"Downloading {model_name}...")
@@ -98,7 +98,11 @@ def main():
     print("\nHuggingFace TrOCR Models:")
     print("-" * 70)
     
-    for model_name in ['microsoft/trocr-base-handwritten']:
+    for model_name in [
+        'microsoft/trocr-base-handwritten',
+        'microsoft/trocr-large-handwritten',
+        'microsoft/trocr-small-handwritten'
+    ]:
         try:
             path, size = download_trocr(model_name)
             results[model_name] = size

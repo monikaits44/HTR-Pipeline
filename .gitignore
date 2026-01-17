@@ -16,7 +16,10 @@ saved_models/experiments/*
 .venv/
 # experiments
 attention_visualizations_test/*
-archive_code/*
-archive_docs/*
 plots/
-problem Statement/*
+problem statement/*
+notebook/sample_images/*
+example project/*
+asset/pretrained_models/*
+notebook/*
+documents/*

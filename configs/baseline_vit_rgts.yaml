@@ -1,6 +1,6 @@
-# ViT-RGTS architecture for HTR on IAM
+# ViT-RGTS architecture for HTR on IAM (Vision Transformers Need Registers)
 arch:
-  type: 'vit_rgts'        # NEW: will select ViT-based HTR model later
+  type: 'vit_rgts'        # Vision Transformer with Register Tokens
 
   # Input resolution used in your pipeline
   image_height: 128
@@ -16,12 +16,20 @@ arch:
   heads: 8
   mlp_dim: 512
 
-  # Register tokens (from the paper)
-  num_registers: 4
+  # Register tokens (from the paper - key innovation!)
+  num_registers: 4  # 4 register tokens for global information aggregation
 
   # Dropouts
   dropout: 0.1
   emb_dropout: 0.1
 
-  # Head config for compatibility with existing code
-  head_type: 'rnn'    # <-- used in trainer/demo to decide how to handle outputs
+  # Head config
+  head_type: 'rnn'    # RNN head on top of ViT features
+  rnn_type: 'lstm'
+  rnn_layers: 3
+  rnn_hidden_size: 256
+
+# Training settings
+train:
+  num_epochs: 5       # Testing: 5 epochs for register comparison
+  batch_size: 8

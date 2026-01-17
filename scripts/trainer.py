@@ -93,26 +93,6 @@ def setup_experiment_dir(config):
     ])
     csv_file.flush()
     
-    # Create metrics documentation file
-    metrics_doc_path = os.path.join(run_dir, 'metrics_description.txt')
-    with open(metrics_doc_path, 'w') as f:
-        f.write("Metrics Description\n")
-        f.write("="*80 + "\n\n")
-        f.write("Metric          | Purpose                | Algorithm                              | Level     | Library\n")
-        f.write("-"*80 + "\n")
-        f.write("CTC Loss        | Training objective     | Connectionist Temporal Classification  | Sequence  | PyTorch nn.CTCLoss\n")
-        f.write("CER             | Character accuracy     | Levenshtein distance                   | Character | editdistance\n")
-        f.write("WER             | Word accuracy          | Levenshtein distance                   | Word      | editdistance + nltk\n")
-        f.write("\n")
-        f.write("Notes:\n")
-        f.write("- CTC Loss: Used during training with log_softmax, reduction='sum', zero_infinity=True\n")
-        f.write("- CER: Character Error Rate = total_edit_distance / total_characters\n")
-        f.write("- WER: Word Error Rate = total_word_edit_distance / total_words\n")
-        f.write("- Lower values are better for all metrics (0.0 = perfect)\n")
-        f.write("- seed: Random seed (if not set, None or -1 indicates no explicit seed)\n")
-    
-    return run_dir, log_file, run_number, csv_file, csv_writer
-    
     return run_dir, log_file, run_number, csv_file, csv_writer
 
 
@@ -258,7 +238,8 @@ class HTRTrainer(nn.Module):
 
     def prepare_optimizers(self):
         config = self.config
-        optimizer = torch.optim.AdamW(self.net.parameters(), config.train.lr, weight_decay=0.00005)
+        # Increased weight decay for better regularization
+        optimizer = torch.optim.AdamW(self.net.parameters(), config.train.lr, weight_decay=0.0001)
 
         self.optimizer = optimizer
 
@@ -290,7 +271,10 @@ class HTRTrainer(nn.Module):
 
         self.net.train()
 
-        tdec = tst_o.argmax(2).permute(1, 0).cpu().numpy().squeeze()
+        tdec = tst_o.argmax(2).permute(1, 0).cpu().numpy()
+        # Handle single batch case - ensure tdec is 1D array not scalar
+        if tdec.ndim > 1:
+            tdec = tdec.squeeze(0)
         # remove duplicates
         dec_transcr = self.decode(tdec, self.classes['i2c'])
 
@@ -322,8 +306,16 @@ class HTRTrainer(nn.Module):
                 output = self.net(img)
 
             act_lens = torch.IntTensor(img.size(0)*[output.size(0)]).to(device)
-            labels = torch.IntTensor([self.classes['c2i'][c] for c in ''.join(transcr)]).to(device)
-            label_lens = torch.IntTensor([len(t) for t in transcr]).to(device)
+            
+            # Fix: Encode each sample's labels separately, then concatenate
+            # CTC expects: concatenated labels for entire batch, with label_lens tracking boundaries
+            batch_labels = []
+            for transcript in transcr:
+                sample_labels = [self.classes['c2i'][c] for c in transcript]
+                batch_labels.extend(sample_labels)
+            
+            labels = torch.IntTensor(batch_labels).to(device)
+            label_lens = torch.IntTensor([len(transcript) for transcript in transcr]).to(device)
 
             loss_val = self.ctc_loss(output, labels, act_lens, label_lens)
 
@@ -334,6 +326,10 @@ class HTRTrainer(nn.Module):
             self.train_losses.append(tloss_val)
         
             loss_val.backward()
+            
+            # Gradient clipping for training stability
+            torch.nn.utils.clip_grad_norm_(self.net.parameters(), max_norm=5.0)
+            
             self.optimizer.step()    
 
             t.set_postfix(values='loss : {:.2f}'.format(tloss_val))
@@ -368,7 +364,11 @@ class HTRTrainer(nn.Module):
             if config.arch.head_type == 'both':
                 o = o[0]
             
-            tdecs = o.argmax(2).permute(1, 0).cpu().numpy().squeeze()
+            tdecs = o.argmax(2).permute(1, 0).cpu().numpy()
+            
+            # Handle batch dimension properly
+            if tdecs.ndim == 1:
+                tdecs = tdecs.reshape(1, -1)
 
             for tdec, transcr in zip(tdecs, transcrs):
                 transcr = transcr.strip()
@@ -431,11 +431,27 @@ def parse_args():
     # Load base config
     conf = OmegaConf.load(sys.argv[1])
     
-    # Load additional config files if provided
-    for config_file in sys.argv[2:]:
-        if config_file.endswith('.yaml'):
-            additional_conf = OmegaConf.load(config_file)
-            conf = OmegaConf.merge(conf, additional_conf)
+    # Separate YAML files from CLI overrides
+    yaml_files = []
+    cli_overrides = []
+    
+    for arg in sys.argv[2:]:
+        if arg.endswith('.yaml'):
+            yaml_files.append(arg)
+        elif '=' in arg:
+            cli_overrides.append(arg)
+        else:
+            print(f"Warning: Ignoring unrecognized argument: {arg}")
+    
+    # Load additional YAML config files
+    for config_file in yaml_files:
+        additional_conf = OmegaConf.load(config_file)
+        conf = OmegaConf.merge(conf, additional_conf)
+    
+    # Apply CLI overrides (e.g., arch.num_registers=0)
+    if cli_overrides:
+        cli_conf = OmegaConf.from_dotlist(cli_overrides)
+        conf = OmegaConf.merge(conf, cli_conf)
 
     OmegaConf.set_struct(conf, True)
     return conf

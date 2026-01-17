@@ -1,0 +1,38 @@
+# TrOCR encoder architecture for HTR on IAM
+# Uses pretrained TrOCR encoder from HuggingFace transformers
+
+arch:
+  type: 'trocr'  # TrOCR encoder (ViT-based)
+
+  # Model selection
+  # Options:
+  #   - microsoft/trocr-base-handwritten (384x384, best for handwriting)
+  #   - microsoft/trocr-large-handwritten
+  #   - microsoft/trocr-base-printed
+  #   - microsoft/trocr-large-printed
+  model_name: 'microsoft/trocr-base-handwritten'
+
+  # TrOCR expects square images (default 384x384)
+  # For line images, we resize to square which may distort aspect ratio
+  # Consider using padding or adaptive pooling if aspect ratio is critical
+  image_height: 384
+  image_width: 384
+
+  # Encoder freezing (useful for fine-tuning)
+  freeze_encoder: False    # Set to True to freeze TrOCR encoder weights
+
+  # Head configuration
+  head_type: 'rnn'         # Options: 'cnn' (linear), 'rnn', 'both'
+  rnn_type: 'lstm'
+  rnn_layers: 2
+  rnn_hidden_size: 256
+
+# Training settings
+train:
+  lr: 3e-5               # Very low LR for pretrained transformers
+  num_epochs: 5          # Testing: 5 epochs to verify code works
+  batch_size: 2          # TrOCR is large, use small batch size
+
+# Evaluation settings
+eval:
+  batch_size: 2
