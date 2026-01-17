@@ -238,7 +238,8 @@ class HTRTrainer(nn.Module):
 
     def prepare_optimizers(self):
         config = self.config
-        optimizer = torch.optim.AdamW(self.net.parameters(), config.train.lr, weight_decay=0.00005)
+        # Increased weight decay for better regularization
+        optimizer = torch.optim.AdamW(self.net.parameters(), config.train.lr, weight_decay=0.0001)
 
         self.optimizer = optimizer
 
@@ -325,6 +326,10 @@ class HTRTrainer(nn.Module):
             self.train_losses.append(tloss_val)
         
             loss_val.backward()
+            
+            # Gradient clipping for training stability
+            torch.nn.utils.clip_grad_norm_(self.net.parameters(), max_norm=5.0)
+            
             self.optimizer.step()    
 
             t.set_postfix(values='loss : {:.2f}'.format(tloss_val))
