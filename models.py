@@ -191,6 +191,8 @@ class ViTRGTSBackbone(nn.Module):
         self,
         image_size: int = 128,
         patch_size: int = 16,
+        patch_height: int = None,
+        patch_width: int = None,
         embed_dim: int = 256,
         depth: int = 6,
         num_heads: int = 8,
@@ -202,7 +204,14 @@ class ViTRGTSBackbone(nn.Module):
     ):
         super().__init__()
 
-        self.patch_size = patch_size
+        # Support both square and rectangular patches
+        if patch_height is None and patch_width is None:
+            self.patch_height = patch_size
+            self.patch_width = patch_size
+        else:
+            self.patch_height = patch_height if patch_height is not None else patch_size
+            self.patch_width = patch_width if patch_width is not None else patch_size
+        
         self.embed_dim = embed_dim
         self.num_registers = num_registers
         self.max_seq_len = max_seq_len
@@ -211,8 +220,8 @@ class ViTRGTSBackbone(nn.Module):
         self.patch_embed = nn.Conv2d(
             in_channels=1,
             out_channels=embed_dim,
-            kernel_size=patch_size,
-            stride=patch_size,
+            kernel_size=(self.patch_height, self.patch_width),
+            stride=(self.patch_height, self.patch_width),
             padding=0,
         )
 
@@ -948,7 +957,8 @@ class HTRNet(nn.Module):
 
             self.backbone = ViTRGTSBackbone(
                 image_size=image_height,         # currently unused internally, but kept for clarity
-                patch_size=patch_height,         # we assume square patches; you can extend if needed
+                patch_height=patch_height,       # support rectangular patches
+                patch_width=patch_width,
                 embed_dim=dim,
                 depth=depth,
                 num_heads=heads,
