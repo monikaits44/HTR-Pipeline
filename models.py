@@ -78,11 +78,24 @@ class CTCtopC(nn.Module):
     def __init__(self, input_size, nclasses, dropout=0.0):
         super(CTCtopC, self).__init__()
 
+        # Add LayerNorm for better training stability
+        self.norm = nn.LayerNorm(input_size)
         self.dropout = nn.Dropout(dropout)
         self.cnn_top = nn.Conv2d(input_size, nclasses, kernel_size=(1, 3), stride=1, padding=(0, 1))
+        
+        # Initialize output layer with smaller weights for stable CTC training
+        nn.init.xavier_uniform_(self.cnn_top.weight, gain=0.1)
+        if self.cnn_top.bias is not None:
+            nn.init.zeros_(self.cnn_top.bias)
 
     def forward(self, x):
         # x: [B, C, H, W] where H=1
+        # Apply LayerNorm on feature dimension
+        B, C, H, W = x.shape
+        x_norm = x.squeeze(2).permute(2, 0, 1)  # [W, B, C]
+        x_norm = self.norm(x_norm)  # LayerNorm on last dim
+        x = x_norm.permute(1, 2, 0).unsqueeze(2)  # Back to [B, C, 1, W]
+        
         x = self.dropout(x)
         y = self.cnn_top(x)  # [B, nclasses, H, W]
         y = y.squeeze(2).permute(2, 0, 1)  # [T, B, nclasses]
@@ -117,6 +130,9 @@ class CTCtopR(nn.Module):
 
         hidden, num_layers = rnn_cfg
 
+        # Add LayerNorm before RNN for better gradient flow
+        self.norm = nn.LayerNorm(input_size)
+        
         if rnn_type == 'gru':
             self.rec = nn.GRU(input_size, hidden, num_layers=num_layers, bidirectional=True, dropout=.2)
         elif rnn_type == 'lstm':
@@ -125,7 +141,21 @@ class CTCtopR(nn.Module):
             print('problem! - no such rnn type is defined')
             exit()
         
-        self.fnl = nn.Sequential(nn.Dropout(.2), nn.Linear(2 * hidden, nclasses))
+        # Add residual connection support
+        self.use_residual = (input_size == 2 * hidden)
+        if self.use_residual:
+            self.residual_proj = nn.Identity()
+        
+        self.fnl = nn.Sequential(
+            nn.LayerNorm(2 * hidden),
+            nn.Dropout(.3), 
+            nn.Linear(2 * hidden, nclasses)
+        )
+        
+        # Better initialization for output layer
+        nn.init.xavier_uniform_(self.fnl[2].weight, gain=0.1)
+        if self.fnl[2].bias is not None:
+            nn.init.zeros_(self.fnl[2].bias)
 
     def forward(self, x):
         # x: [B, C, H, W] where H should be 1 for sequence data
@@ -134,6 +164,9 @@ class CTCtopR(nn.Module):
         # Remove singleton spatial dimension and transpose
         # [B, C, 1, W] -> [B, C, W] -> [W, B, C]
         y = x.squeeze(2).permute(2, 0, 1)  # [T, B, C]
+        
+        # Apply LayerNorm
+        y = self.norm(y)  # [T, B, C]
         
         y = self.rec(y)[0]  # [T, B, 2*hidden]
         y = self.fnl(y)     # [T, B, nclasses]
@@ -230,6 +263,7 @@ class ViTRGTSBackbone(nn.Module):
             torch.zeros(1, num_registers, embed_dim)
         )
 
+
         # Learned positional embeddings for (registers + patches)
         self.pos_embed = nn.Parameter(
             torch.zeros(1, max_seq_len, embed_dim)
@@ -255,6 +289,7 @@ class ViTRGTSBackbone(nn.Module):
         nn.init.normal_(self.pos_embed, std=0.02)
         # patch_embed uses Kaiming by default; you can tweak if you want stronger init
 
+
     def forward(self, x):
         """
         x: [B, 1, H, W]
@@ -273,6 +308,7 @@ class ViTRGTSBackbone(nn.Module):
 
         patch_tokens = x.flatten(2).transpose(1, 2)  # [B, Np, D]
 
+
         # Prepare register tokens
         reg_tokens = self.register_tokens.expand(B, -1, -1)  # [B, R, D]
 
@@ -287,6 +323,8 @@ class ViTRGTSBackbone(nn.Module):
             )
 
         # Add positional embeddings and dropout
+        # CRITICAL: When num_registers=0, use pos_embed starting from index 0
+        # When num_registers>0, pos_embed[:R] are for registers, pos_embed[R:] for patches
         pos = self.pos_embed[:, :S, :]  # [1, S, D]
         tokens = tokens + pos
         tokens = self.emb_dropout(tokens)
@@ -295,6 +333,7 @@ class ViTRGTSBackbone(nn.Module):
         encoded = self.encoder(tokens)         # [B, S, D]
 
         # Split back into registers and patch tokens
+
         reg_out = encoded[:, :self.num_registers, :]      # [B, R, D]
         patch_out = encoded[:, self.num_registers:, :]    # [B, Np, D]
 
@@ -325,6 +364,7 @@ class ViTRGTSBackbone(nn.Module):
         reg_tokens = self.register_tokens.expand(B, -1, -1)  # [B, R, D]
 
         tokens = torch.cat([reg_tokens, patch_tokens], dim=1)   # [B, S, D]
+        
         S = tokens.size(1)
 
         pos = self.pos_embed[:, :S, :]
@@ -394,7 +434,7 @@ class ViTRGTSBackbone(nn.Module):
             ff_output = layer.linear2(layer.dropout(layer.activation(layer.linear1(x_tokens))))
             x_tokens = x_tokens + ff_output
 
-        # === SPLIT REGISTERS & PATCH TOKENS =====================================
+
         reg_out = x_tokens[:, :self.num_registers, :]            # [B, R, D]
         patch_out = x_tokens[:, self.num_registers:, :]          # [B, Np, D]
 
@@ -686,6 +726,7 @@ class TorchVisionViTBackbone(nn.Module):
         
         encoded = self.vit.encoder.ln(x_tokens)
         
+
         # Split tokens
         cls_out = encoded[:, 0, :]
         if self.num_registers > 0:
@@ -733,8 +774,9 @@ class TrOCREncoderBackbone(nn.Module):
         import os
         cache_dir = os.path.abspath(os.path.join(
             os.path.dirname(__file__), 
+            'asset',
             'pretrained_models', 
-            'transformers'
+            'trocr'
         ))
         os.makedirs(cache_dir, exist_ok=True)
         
@@ -956,8 +998,8 @@ class HTRNet(nn.Module):
             max_seq_len = getattr(arch_cfg, "vit_max_seq_len", seq_len_est)
 
             self.backbone = ViTRGTSBackbone(
-                image_size=image_height,         # currently unused internally, but kept for clarity
-                patch_height=patch_height,       # support rectangular patches
+                image_size=image_height,
+                patch_height=patch_height,        # Pass asymmetric patch sizes
                 patch_width=patch_width,
                 embed_dim=dim,
                 depth=depth,
@@ -1176,4 +1218,3 @@ class HTRNet(nn.Module):
         
         else:
             raise ValueError(f"forward_explain not supported for architecture: {self.arch_type}")
-
