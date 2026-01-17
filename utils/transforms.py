@@ -1,10 +1,17 @@
 import albumentations as A
-
+import cv2
 # albumentations transforms for text augmentation
 aug_transforms = A.Compose([
     
     # geometric augmentation
-    A.Affine(rotate=(-1, 1), shear={'x':(-30, 30), 'y' : (-5, 5)}, scale=(0.6, 1.2), translate_percent=0.02, mode=1, p=0.5),
+    A.Affine(
+        rotate=(-1, 1),
+        shear={'x': (-30, 30), 'y': (-5, 5)},
+        scale=(0.6, 1.2),
+        translate_percent=0.02,
+        interpolation=cv2.INTER_LINEAR,
+        border_mode=cv2.BORDER_REFLECT,
+        p=0.5),
 
     # perspective transform
     #A.Perspective(scale=(0.05, 0.1), p=0.5),
@@ -12,7 +19,7 @@ aug_transforms = A.Compose([
     # distortions
     A.OneOf([
         A.GridDistortion(distort_limit=(-.1, .1), p=0.5),
-        A.ElasticTransform(alpha=60, sigma=20, alpha_affine=0.5, p=0.5),
+        A.ElasticTransform(alpha=60, sigma=20, p=0.5),
     ], p=0.5),
 
     # erosion & dilation
