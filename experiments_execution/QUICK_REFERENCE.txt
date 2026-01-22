@@ -1,0 +1,118 @@
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                    HTR EXPERIMENTS - QUICK REFERENCE                         ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+┌─ SUBMIT ALL EXPERIMENTS ─────────────────────────────────────────────────────┐
+│                                                                               │
+│  cd experiments_execution                                                     │
+│  ./submit_all_experiments.sh                                                  │
+│                                                                               │
+│  Choose mode:                                                                 │
+│    1) Sequential - Jobs run one after another (recommended)                   │
+│    2) Parallel   - All jobs at once (if resources available)                  │
+│    3) Manual     - Confirm each job individually                              │
+│                                                                               │
+└───────────────────────────────────────────────────────────────────────────────┘
+
+┌─ SUBMIT SINGLE EXPERIMENT ───────────────────────────────────────────────────┐
+│                                                                               │
+│  ./submit_single.sh <number>                                                  │
+│                                                                               │
+│  Available:                                                                   │
+│    1 - Baseline CNN-RNN                                                       │
+│    2 - ViT-RGTS (0 registers)                                                 │
+│    3 - ViT-RGTS (2 registers)                                                 │
+│    4 - ViT-RGTS (4 registers)  ← Recommended                                  │
+│    5 - ViT-RGTS (8 registers)                                                 │
+│    6 - ViT-RGTS (16 registers)                                                │
+│    7 - TorchVision ViT-B/16                                                   │
+│    8 - TrOCR Base                                                             │
+│                                                                               │
+└───────────────────────────────────────────────────────────────────────────────┘
+
+┌─ MONITOR JOBS ───────────────────────────────────────────────────────────────┐
+│                                                                               │
+│  squeue -u $USER                          # Check job status                  │
+│  watch -n 5 squeue -u $USER               # Monitor in real-time              │
+│  tail -f logs/*/output_*.log              # View all logs live                │
+│  tail -f logs/vit_rgts_registers/*.log    # View specific category            │
+│                                                                               │
+└───────────────────────────────────────────────────────────────────────────────┘
+
+┌─ MANAGE JOBS ────────────────────────────────────────────────────────────────┐
+│                                                                               │
+│  scancel <job_id>                         # Cancel specific job               │
+│  scancel -u $USER                         # Cancel all your jobs              │
+│  scontrol show job <job_id>               # Job details                       │
+│  seff <job_id>                            # Efficiency report (after done)    │
+│                                                                               │
+└───────────────────────────────────────────────────────────────────────────────┘
+
+┌─ TRACKING NOTEBOOK ──────────────────────────────────────────────────────────┐
+│                                                                               │
+│  jupyter notebook experiment_tracker.ipynb                                    │
+│                                                                               │
+│  Features:                                                                    │
+│    • View job status and logs                                                 │
+│    • Analyze experiment results                                               │
+│    • Compare architectures                                                    │
+│    • Visualize register token impact                                          │
+│                                                                               │
+└───────────────────────────────────────────────────────────────────────────────┘
+
+┌─ LOG ORGANIZATION ───────────────────────────────────────────────────────────┐
+│                                                                               │
+│  logs/                                                                        │
+│  ├── baseline/              Baseline CNN-RNN logs                            │
+│  ├── vit_rgts_registers/    All ViT-RGTS variations (0,2,4,8,16 registers)   │
+│  └── pretrained/            TorchVision ViT and TrOCR logs                    │
+│                                                                               │
+│  Each contains:                                                               │
+│    • output_<config>_<job_id>.log                                             │
+│    • error_<config>_<job_id>.log                                              │
+│                                                                               │
+└───────────────────────────────────────────────────────────────────────────────┘
+
+┌─ USEFUL COMMANDS ────────────────────────────────────────────────────────────┐
+│                                                                               │
+│  # Find latest log                                                            │
+│  ls -t logs/*/output_*.log | head -1                                          │
+│                                                                               │
+│  # Search for errors                                                          │
+│  grep -i "error" logs/*/error_*.log                                           │
+│                                                                               │
+│  # Check results                                                              │
+│  grep "CER:" logs/*/output_*.log                                              │
+│                                                                               │
+│  # List completed models                                                      │
+│  ls ../saved_models/experiments/run_*/model.pt                                │
+│                                                                               │
+└───────────────────────────────────────────────────────────────────────────────┘
+
+┌─ TYPICAL WORKFLOW ───────────────────────────────────────────────────────────┐
+│                                                                               │
+│  1. cd experiments_execution                                                  │
+│  2. ./submit_all_experiments.sh      (choose Sequential mode)                 │
+│  3. watch -n 5 squeue -u $USER       (monitor progress)                       │
+│  4. jupyter notebook experiment_tracker.ipynb   (analyze results)             │
+│  5. cd .. && python scripts/postprocessing/analyze_evaluation.py \            │
+│        saved_models/experiments/                                              │
+│                                                                               │
+└───────────────────────────────────────────────────────────────────────────────┘
+
+┌─ EXPECTED TIMELINE ──────────────────────────────────────────────────────────┐
+│                                                                               │
+│  Per experiment (on RTX 3080):                                                │
+│    • Baseline CNN-RNN:      ~3-4 hours                                        │
+│    • ViT-RGTS:             ~3.5-4.5 hours each × 5 = ~20 hours                │
+│    • TorchVision ViT:      ~4-5 hours                                         │
+│    • TrOCR:                ~6-8 hours                                         │
+│                                                                               │
+│  Total (sequential):        ~35-40 hours                                      │
+│  Total (parallel):          ~6-8 hours (if 8 GPUs available)                  │
+│                                                                               │
+└───────────────────────────────────────────────────────────────────────────────┘
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  For detailed documentation, see experiments_execution/README.md             ║
+╚══════════════════════════════════════════════════════════════════════════════╝
