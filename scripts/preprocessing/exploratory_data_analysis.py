@@ -10,7 +10,7 @@ This script performs comprehensive analysis and visualization of the IAM dataset
 - Writer distribution
 
 Usage:
-    python scripts/preprocessing/exploratory_data_analysis.py --data-path ./data/IAM/processed_lines --output-dir ./eda_output
+    python scripts/preprocessing/exploratory_data_analysis.py --data-path ./data/IAM/processed_lines --output-dir ./output
     
     # Quick analysis without saving images
     python scripts/preprocessing/exploratory_data_analysis.py --data-path ./data/IAM/processed_lines --no-save-images
@@ -620,14 +620,15 @@ def analyze_image_dimensions(data_path, stats, output_dir=None, max_samples=1000
     return dimensions
 
 
-def analyze_writer_distribution(stats):
-    """Analyze writer distribution across samples."""
+def analyze_writer_distribution(stats, output_dir=None):
+    """Analyze writer distribution across samples with visualization."""
     print("\n" + "="*80)
     print("WRITER DISTRIBUTION ANALYSIS")
     print("="*80)
     
     writer_counter = Counter()
     split_writer_counters = {split: Counter() for split in stats.keys()}
+    split_writers_set = {split: set() for split in stats.keys()}
     
     for split, data in stats.items():
         for img_id, _ in data['samples']:
@@ -635,6 +636,7 @@ def analyze_writer_distribution(stats):
             writer_id = img_id.split('-')[0]
             writer_counter[writer_id] += 1
             split_writer_counters[split][writer_id] += 1
+            split_writers_set[split].add(writer_id)
     
     unique_writers = len(writer_counter)
     total_samples = sum(writer_counter.values())
@@ -642,6 +644,13 @@ def analyze_writer_distribution(stats):
     print(f"\nTotal unique writers: {unique_writers}")
     print(f"Total samples: {total_samples:,}")
     print(f"Average samples per writer: {total_samples / unique_writers:.2f}")
+    print(f"Min samples per writer: {min(writer_counter.values())}")
+    print(f"Max samples per writer: {max(writer_counter.values())}")
+    print(f"Median samples per writer: {np.median(list(writer_counter.values())):.2f}")
+    
+    # Note about full IAM dataset
+    print(f"\nNote: The full IAM database contains 657 writers.")
+    print(f"      Your processed_lines subset contains {unique_writers} writers.")
     
     print(f"\nTop 10 writers by sample count:")
     print(f"{'Writer ID':<12} {'Count':<10} {'Percentage':<12}")
@@ -656,7 +665,205 @@ def analyze_writer_distribution(stats):
     for split in ['train', 'val', 'test']:
         if split in split_writer_counters:
             unique_in_split = len(split_writer_counters[split])
-            print(f"  {split}: {unique_in_split} unique writers")
+            samples_in_split = sum(split_writer_counters[split].values())
+            print(f"  {split}: {unique_in_split} unique writers, {samples_in_split:,} samples")
+    
+    # Check for writer overlap between splits
+    print(f"\nWriter overlap between splits:")
+    train_writers = split_writers_set.get('train', set())
+    val_writers = split_writers_set.get('val', set())
+    test_writers = split_writers_set.get('test', set())
+    
+    train_val_overlap = len(train_writers & val_writers)
+    train_test_overlap = len(train_writers & test_writers)
+    val_test_overlap = len(val_writers & test_writers)
+    
+    print(f"  Train ∩ Val: {train_val_overlap} writers")
+    print(f"  Train ∩ Test: {train_test_overlap} writers")
+    print(f"  Val ∩ Test: {val_test_overlap} writers")
+    
+    if train_val_overlap > 0 or train_test_overlap > 0:
+        print(f"  ⚠ Warning: Writer overlap detected between splits!")
+        print(f"             This may lead to overfitting (model sees same writer's style in train and test)")
+    else:
+        print(f"  ✓ Good: No writer overlap between splits (writer-independent split)")
+    
+    # Create comprehensive visualization
+    fig = plt.figure(figsize=(18, 12))
+    gs = fig.add_gridspec(2, 3, hspace=0.3, wspace=0.3)
+    fig.suptitle('Writer Distribution Analysis', fontsize=18, fontweight='bold', y=0.98)
+    
+    # Plot 1: Samples per writer distribution
+    ax1 = fig.add_subplot(gs[0, 0])
+    samples_per_writer = list(writer_counter.values())
+    ax1.hist(samples_per_writer, bins=30, color=COLOR_PALETTE['primary'], 
+            alpha=0.7, edgecolor='black', linewidth=1.2)
+    ax1.axvline(np.mean(samples_per_writer), color='red', linestyle='--', 
+               linewidth=2.5, label=f'Mean: {np.mean(samples_per_writer):.1f}')
+    ax1.axvline(np.median(samples_per_writer), color='orange', linestyle='--', 
+               linewidth=2.5, label=f'Median: {np.median(samples_per_writer):.1f}')
+    ax1.set_xlabel('Samples per Writer', fontweight='bold', fontsize=12)
+    ax1.set_ylabel('Number of Writers', fontweight='bold', fontsize=12)
+    ax1.set_title('Distribution of Samples per Writer', fontweight='bold', pad=10, fontsize=13)
+    ax1.legend(loc='upper right', frameon=True, shadow=True)
+    ax1.grid(True, alpha=0.2, linestyle='--', axis='y')
+    ax1.spines['top'].set_visible(False)
+    ax1.spines['right'].set_visible(False)
+    
+    # Add statistics text
+    stats_text = f'Total Writers: {unique_writers}\nTotal Samples: {total_samples:,}\nAvg: {total_samples/unique_writers:.1f}'
+    ax1.text(0.98, 0.97, stats_text, transform=ax1.transAxes,
+            verticalalignment='top', horizontalalignment='right',
+            bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.4),
+            fontsize=10)
+    
+    # Plot 2: Top 15 writers
+    ax2 = fig.add_subplot(gs[0, 1])
+    top_15_writers = writer_counter.most_common(15)
+    writers = [w for w, _ in top_15_writers]
+    counts = [c for _, c in top_15_writers]
+    
+    bars = ax2.barh(range(len(writers)), counts, color=COLOR_PALETTE['primary'], 
+                   edgecolor='black', linewidth=1.2, alpha=0.85)
+    ax2.set_yticks(range(len(writers)))
+    ax2.set_yticklabels(writers, fontsize=10)
+    ax2.set_xlabel('Number of Samples', fontweight='bold', fontsize=12)
+    ax2.set_ylabel('Writer ID', fontweight='bold', fontsize=12)
+    ax2.set_title('Top 15 Writers by Sample Count', fontweight='bold', pad=10, fontsize=13)
+    ax2.grid(True, alpha=0.2, linestyle='--', axis='x')
+    ax2.spines['top'].set_visible(False)
+    ax2.spines['right'].set_visible(False)
+    ax2.invert_yaxis()
+    
+    # Add value labels
+    for i, (bar, count) in enumerate(zip(bars, counts)):
+        width = bar.get_width()
+        ax2.text(width, bar.get_y() + bar.get_height()/2, f' {count}',
+                ha='left', va='center', fontsize=9, fontweight='bold')
+    
+    # Plot 3: Writer distribution across splits
+    ax3 = fig.add_subplot(gs[0, 2])
+    split_names = ['Train', 'Val', 'Test']
+    split_order = ['train', 'val', 'test']
+    colors_split = [COLOR_PALETTE['train'], COLOR_PALETTE['val'], COLOR_PALETTE['test']]
+    
+    writer_counts = [len(split_writers_set[split]) for split in split_order if split in split_writers_set]
+    
+    bars = ax3.bar(split_names, writer_counts, color=colors_split, 
+                  edgecolor='black', linewidth=1.2, alpha=0.85)
+    ax3.set_ylabel('Number of Unique Writers', fontweight='bold', fontsize=12)
+    ax3.set_xlabel('Data Split', fontweight='bold', fontsize=12)
+    ax3.set_title('Unique Writers per Split', fontweight='bold', pad=10, fontsize=13)
+    ax3.grid(True, alpha=0.2, linestyle='--', axis='y')
+    ax3.spines['top'].set_visible(False)
+    ax3.spines['right'].set_visible(False)
+    
+    # Add value labels
+    for bar, count in zip(bars, writer_counts):
+        height = bar.get_height()
+        ax3.text(bar.get_x() + bar.get_width()/2., height,
+                f'{count}', ha='center', va='bottom', fontsize=12, fontweight='bold')
+    
+    # Plot 4: Writer overlap Venn diagram (simplified bar chart)
+    ax4 = fig.add_subplot(gs[1, 0])
+    
+    # Calculate exclusive and shared writers
+    train_only = len(train_writers - val_writers - test_writers)
+    val_only = len(val_writers - train_writers - test_writers)
+    test_only = len(test_writers - train_writers - val_writers)
+    train_val_only = len((train_writers & val_writers) - test_writers)
+    train_test_only = len((train_writers & test_writers) - val_writers)
+    val_test_only = len((val_writers & test_writers) - train_writers)
+    all_three = len(train_writers & val_writers & test_writers)
+    
+    categories = ['Train\nOnly', 'Val\nOnly', 'Test\nOnly', 'Train∩Val', 'Train∩Test', 'Val∩Test', 'All 3']
+    values = [train_only, val_only, test_only, train_val_only, train_test_only, val_test_only, all_three]
+    colors_overlap = [COLOR_PALETTE['train'], COLOR_PALETTE['val'], COLOR_PALETTE['test'], 
+                     '#8B4513', '#4B0082', '#2F4F4F', '#8B0000']
+    
+    bars = ax4.bar(categories, values, color=colors_overlap, edgecolor='black', 
+                  linewidth=1.2, alpha=0.85)
+    ax4.set_ylabel('Number of Writers', fontweight='bold', fontsize=12)
+    ax4.set_xlabel('Writer Overlap Category', fontweight='bold', fontsize=12)
+    ax4.set_title('Writer Overlap Between Splits', fontweight='bold', pad=10, fontsize=13)
+    ax4.grid(True, alpha=0.2, linestyle='--', axis='y')
+    ax4.spines['top'].set_visible(False)
+    ax4.spines['right'].set_visible(False)
+    
+    # Add value labels
+    for bar, val in zip(bars, values):
+        if val > 0:
+            height = bar.get_height()
+            ax4.text(bar.get_x() + bar.get_width()/2., height,
+                    f'{val}', ha='center', va='bottom', fontsize=10, fontweight='bold')
+    
+    # Plot 5: Cumulative distribution of samples
+    ax5 = fig.add_subplot(gs[1, 1])
+    sorted_counts = sorted(writer_counter.values(), reverse=True)
+    cumulative_samples = np.cumsum(sorted_counts)
+    cumulative_percent = (cumulative_samples / total_samples) * 100
+    
+    ax5.plot(range(1, len(sorted_counts) + 1), cumulative_percent, 
+            linewidth=2.5, color=COLOR_PALETTE['primary'], marker='o', 
+            markersize=3, alpha=0.7)
+    ax5.axhline(50, color='red', linestyle='--', alpha=0.5, label='50% of samples')
+    ax5.axhline(80, color='orange', linestyle='--', alpha=0.5, label='80% of samples')
+    ax5.axhline(90, color='green', linestyle='--', alpha=0.5, label='90% of samples')
+    
+    # Find how many writers account for 50%, 80%, 90%
+    writers_for_50 = np.argmax(cumulative_percent >= 50) + 1
+    writers_for_80 = np.argmax(cumulative_percent >= 80) + 1
+    writers_for_90 = np.argmax(cumulative_percent >= 90) + 1
+    
+    ax5.set_xlabel('Number of Writers (ranked by sample count)', fontweight='bold', fontsize=12)
+    ax5.set_ylabel('Cumulative % of Samples', fontweight='bold', fontsize=12)
+    ax5.set_title('Cumulative Sample Distribution', fontweight='bold', pad=10, fontsize=13)
+    ax5.legend(loc='lower right', frameon=True, shadow=True)
+    ax5.grid(True, alpha=0.2, linestyle='--')
+    ax5.spines['top'].set_visible(False)
+    ax5.spines['right'].set_visible(False)
+    
+    # Add annotation
+    annotation_text = f'Top {writers_for_50} writers → 50% samples\nTop {writers_for_80} writers → 80% samples\nTop {writers_for_90} writers → 90% samples'
+    ax5.text(0.02, 0.98, annotation_text, transform=ax5.transAxes,
+            verticalalignment='top',
+            bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.4),
+            fontsize=9)
+    
+    # Plot 6: Sample imbalance across writers
+    ax6 = fig.add_subplot(gs[1, 2])
+    sorted_counts_full = sorted(writer_counter.values(), reverse=True)
+    writer_ranks = list(range(1, len(sorted_counts_full) + 1))
+    
+    ax6.plot(writer_ranks, sorted_counts_full, linewidth=2.5, 
+            color=COLOR_PALETTE['primary'], marker='o', markersize=4, alpha=0.7)
+    ax6.axhline(np.mean(sorted_counts_full), color='red', linestyle='--', 
+               linewidth=2, label=f'Mean: {np.mean(sorted_counts_full):.1f}')
+    ax6.set_xlabel('Writer Rank (by sample count)', fontweight='bold', fontsize=12)
+    ax6.set_ylabel('Number of Samples', fontweight='bold', fontsize=12)
+    ax6.set_title('Writer Sample Imbalance', fontweight='bold', pad=10, fontsize=13)
+    ax6.legend(loc='upper right', frameon=True, shadow=True)
+    ax6.grid(True, alpha=0.2, linestyle='--')
+    ax6.spines['top'].set_visible(False)
+    ax6.spines['right'].set_visible(False)
+    
+    # Add imbalance ratio
+    imbalance_ratio = max(sorted_counts_full) / min(sorted_counts_full)
+    ax6.text(0.5, 0.05, f'Imbalance Ratio: {imbalance_ratio:.1f}:1\n(Max/Min samples per writer)', 
+            transform=ax6.transAxes, ha='center',
+            bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5),
+            fontsize=9, fontweight='bold')
+    
+    plt.tight_layout()
+    
+    if output_dir:
+        plt.savefig(os.path.join(output_dir, 'writer_distribution_analysis.png'), 
+                    dpi=300, bbox_inches='tight')
+        print(f"\nSaved: writer_distribution_analysis.png")
+    else:
+        plt.show()
+    
+    plt.close()
     
     return writer_counter
 
@@ -754,7 +961,7 @@ def main():
     analyze_text_lengths(stats, output_dir)
     char_counter = analyze_character_frequency(stats, classes_path, output_dir)
     analyze_image_dimensions(args.data_path, stats, output_dir, args.max_image_samples)
-    writer_counter = analyze_writer_distribution(stats)
+    writer_counter = analyze_writer_distribution(stats, output_dir)
     
     # Save summary report
     if output_dir:
