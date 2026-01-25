@@ -508,20 +508,20 @@ def analyze_character_frequency(stats, classes_path, output_dir=None):
     return char_counter
 
 
-def analyze_image_dimensions(data_path, stats, output_dir=None, max_samples=1000):
+def analyze_image_dimensions(data_path, stats, output_dir=None, max_samples=None):
     """Analyze image dimensions and aspect ratios."""
     print("\n" + "="*80)
     print("IMAGE DIMENSION ANALYSIS")
     print("="*80)
     
-    print(f"\nAnalyzing up to {max_samples} images per split...")
+    print(f"\nAnalyzing all images from all splits...")
     
     dimensions = []
     split_dimensions = {split: [] for split in stats.keys()}
     
     for split, data in stats.items():
         img_dir = os.path.join(data_path, split)
-        samples = data['samples'][:max_samples]
+        samples = data['samples'] if max_samples is None else data['samples'][:max_samples]
         
         print(f"\nProcessing {split} split ({len(samples)} samples)...")
         for img_id, _ in tqdm(samples, desc=f"Loading {split} images"):
@@ -929,8 +929,8 @@ def main():
     parser.add_argument(
         '--max-image-samples',
         type=int,
-        default=1000,
-        help='Maximum number of images to analyze per split'
+        default=None,
+        help='Maximum number of images to analyze per split (None = all images)'
     )
     
     args = parser.parse_args()
