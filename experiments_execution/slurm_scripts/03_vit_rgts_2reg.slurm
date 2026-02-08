@@ -2,7 +2,7 @@
 #SBATCH --job-name=vit_rgts_2reg
 #SBATCH --output=../logs/vit_rgts_registers/output_2reg_%j.log
 #SBATCH --error=../logs/vit_rgts_registers/error_2reg_%j.log
-#SBATCH --time=03:00:00
+#SBATCH --time=04:00:00
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=8
 #SBATCH --partition=rtx3080

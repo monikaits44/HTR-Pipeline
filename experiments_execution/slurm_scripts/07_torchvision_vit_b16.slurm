@@ -2,7 +2,7 @@
 #SBATCH --job-name=tv_vit_b16
 #SBATCH --output=../logs/pretrained/output_vit_b16_%j.log
 #SBATCH --error=../logs/pretrained/error_vit_b16_%j.log
-#SBATCH --time=03:00:00
+#SBATCH --time=04:00:00
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=8
 #SBATCH --partition=rtx3080
