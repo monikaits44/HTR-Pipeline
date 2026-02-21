@@ -2,33 +2,49 @@
 """
 Plot Training Metrics from Experiment Results
 
-This script visualizes training metrics from saved experiment results:
+Visualizes training curves from results.csv for any architecture.
+Supports single model analysis or multi-model comparison.
+
+Supported Architectures: ALL (cnn_rnn, vit_rgts, torchvision_vit, trocr)
+    Reads results.csv and config.json from run directories.
+Input: One or more run directories containing results.csv
+Output: Training curve plots (saved or displayed)
+
+Metrics Plotted:
 - Training CTC Loss vs Epoch
 - Validation/Test CER vs Epoch
 - Validation/Test WER vs Epoch
 - Learning Rate Schedule
 
-Supports single model or multiple models comparison.
-
 Usage:
-    # Single model
-    python scripts/postprocessing/plot_training_metrics.py --model-path saved_models/experiments/run_33/
-    
-    # Multiple models comparison
+    # Single model (any architecture)
     python scripts/postprocessing/plot_training_metrics.py \
-        --model-path saved_models/experiments/run_33/ \
-        --model-path saved_models/experiments/run_34/ \
-        --model-path saved_models/experiments/run_35/
-    
-    # Custom output directory
+        --model-path saved_models/experiments/run_32/
+
+    # Compare multiple models (e.g., all ViT-RGTS v2 runs)
     python scripts/postprocessing/plot_training_metrics.py \
-        --model-path saved_models/experiments/run_33/ \
-        --output-dir ./output/training_plots/
-    
+        --model-path saved_models/experiments/run_50/ \
+        --model-path saved_models/experiments/run_51/ \
+        --model-path saved_models/experiments/run_52/ \
+        --model-path saved_models/experiments/run_53/ \
+        --model-path saved_models/experiments/run_54/
+
+    # Compare across architectures
+    python scripts/postprocessing/plot_training_metrics.py \
+        --model-path saved_models/experiments/run_32/ \
+        --model-path saved_models/experiments/run_39/ \
+        --model-path saved_models/experiments/run_40/ \
+        --model-path saved_models/experiments/run_54/
+
     # Plot specific metrics only
     python scripts/postprocessing/plot_training_metrics.py \
-        --model-path saved_models/experiments/run_33/ \
+        --model-path saved_models/experiments/run_32/ \
         --metrics loss cer
+
+    # Custom output directory
+    python scripts/postprocessing/plot_training_metrics.py \
+        --model-path saved_models/experiments/run_32/ \
+        --output-dir ./output/training_plots/
 """
 
 import argparse
@@ -39,21 +55,22 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
+import json
 from typing import List, Dict, Tuple
 
 # Professional color palette
 COLOR_PALETTE = {
-    'primary': '#002f6c',      # Deep blue
+    'primary': "#84fa30",      # Deep blue
     'secondary': '#004359',     # Teal blue
     'accent1': '#386846',       # Forest green
-    'accent2': '#34677d',       # Steel blue
-    'model1': '#002f6c',        # Deep blue
+    'accent2': "#63065f",       # Steel blue
+    'model1': "#081d39",        # Deep blue
     'model2': '#004359',        # Teal
-    'model3': '#386846',        # Green
+    'model3': "#B3D03F",        # Green
     'model4': '#34677d',        # Steel blue
     'model5': '#d62728',        # Red
     'model6': '#ff7f0e',        # Orange
-    'model7': '#2ca02c',        # Green
+    'model7': "#0a360a",        # Green
     'model8': '#9467bd',        # Purple
 }
 
@@ -70,7 +87,7 @@ plt.rcParams['figure.titlesize'] = 16
 
 
 def load_results(model_path: str) -> Tuple[pd.DataFrame, str]:
-    """Load results.csv from model path and extract model name."""
+    """Load results.csv from model path and extract descriptive model name from config."""
     results_path = os.path.join(model_path, 'results.csv')
     
     if not os.path.exists(results_path):
@@ -78,10 +95,58 @@ def load_results(model_path: str) -> Tuple[pd.DataFrame, str]:
     
     df = pd.read_csv(results_path)
     
-    # Extract model name from path (e.g., run_33 from saved_models/experiments/run_33/)
-    model_name = Path(model_path).stem if Path(model_path).stem else Path(model_path).parent.stem
-    if not model_name or model_name == 'experiments':
-        model_name = os.path.basename(os.path.normpath(model_path))
+    # Load config.json to get architecture type
+    config_path = os.path.join(model_path, 'config.json')
+    run_name = Path(model_path).stem if Path(model_path).stem else Path(model_path).parent.stem
+    if not run_name or run_name == 'experiments':
+        run_name = os.path.basename(os.path.normpath(model_path))
+    
+    # Try to extract architecture information from config
+    model_name = run_name  # Default fallback
+    
+    if os.path.exists(config_path):
+        try:
+            with open(config_path, 'r') as f:
+                config = json.load(f)
+            
+            # Extract architecture type
+            arch_type = config.get('arch', {}).get('type', 'unknown')
+            
+            # Build descriptive name based on architecture
+            if arch_type == 'cnn_rnn':
+                model_name = "CNN-RNN"
+            elif arch_type == 'vit_rgts':
+                # Check for number of registers
+                num_registers = config.get('arch', {}).get('num_registers', None)
+                if num_registers is not None:
+                    model_name = f"ViT-RGTS ({num_registers} reg)"
+                else:
+                    model_name = "ViT-RGTS"
+            elif arch_type == 'torchvision_vit':
+                # Check for model name (e.g., vit_b_16)
+                model_variant = config.get('arch', {}).get('model_name', 'vit_b_16')
+                num_registers = config.get('arch', {}).get('num_registers', 0)
+                if num_registers > 0:
+                    model_name = f"TorchVision-{model_variant.upper()} ({num_registers} reg)"
+                else:
+                    model_name = f"TorchVision-{model_variant.upper()}"
+            elif arch_type == 'trocr':
+                model_name = "TrOCR"
+            else:
+                model_name = f"{arch_type} ({run_name})"
+            
+            # Append run name if it provides additional context
+            if run_name and run_name != 'experiments' and not run_name.startswith('run_'):
+                model_name = f"{model_name} [{run_name}]"
+            elif run_name.startswith('run_'):
+                # Add run number as suffix for disambiguation
+                model_name = f"{model_name} (Run {run_name.split('_')[-1]})"
+                
+        except Exception as e:
+            print(f"Warning: Could not parse config.json for {model_path}: {e}")
+            model_name = run_name
+    else:
+        print(f"Warning: config.json not found for {model_path}, using run name")
     
     return df, model_name
 
