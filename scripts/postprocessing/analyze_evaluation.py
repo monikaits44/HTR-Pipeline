@@ -1,16 +1,34 @@
 #!/usr/bin/env python3
 """
-Analyze detailed evaluation results from training runs.
+Analyze Per-Sample Evaluation Results
+
+Parses evaluation_details.csv to provide detailed error analysis including
+worst/best samples, error distributions, and length-based performance.
+
+Supported Architectures: ALL (cnn_rnn, vit_rgts, torchvision_vit, trocr)
+    Architecture-agnostic — reads CSV output from any model evaluation.
+Input: evaluation_details.csv from any run directory
+Output: Terminal analysis with statistics and error breakdown
 
 Usage:
-    python scripts/postprocessing/analyze_evaluation.py saved_models/experiments/run_X/evaluation_details.csv
+    # Analyze CNN-RNN evaluation (run_32)
+    python scripts/postprocessing/analyze_evaluation.py \
+        saved_models/experiments/run_32/evaluation_details.csv
 
-This script provides:
-- Overall statistics per epoch and dataset
-- Worst performing samples (highest CER/WER)
-- Best performing samples (lowest CER/WER)
-- Error distribution analysis
-- Length-based analysis (how performance varies with text length)
+    # Analyze ViT-RGTS evaluation (run_54)
+    python scripts/postprocessing/analyze_evaluation.py \
+        saved_models/experiments/run_54/evaluation_details.csv
+
+    # Analyze TrOCR evaluation (run_40)
+    python scripts/postprocessing/analyze_evaluation.py \
+        saved_models/experiments/run_40/evaluation_details.csv
+
+Analysis Provided:
+    - Overall statistics per epoch and dataset
+    - Worst performing samples (highest CER/WER)
+    - Best performing samples (lowest CER/WER)
+    - Error distribution analysis
+    - Length-based analysis (performance vs text length)
 """
 
 import sys
