@@ -509,7 +509,7 @@ def main():
     if mode == 'test_set':
         run_test_set_mode(net, config, device, out_dir, extract_attention)
     else:
-        run_image_mode(net, config, device, out_dir, image_paths,
+        run_image_mode (net, config, device, out_dir, image_paths,
                        extract_attention)
 
     print(f'\nAll features saved to: {out_dir}')
