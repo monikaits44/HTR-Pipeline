@@ -107,18 +107,13 @@ def upscale_patch_aligned(patch_map, H_img, W_img):
     return heat_up[:H_img, :W_img]
 
 
-def resolve_norms_path(explain_dir, sample_idx, image_name=None):
-    """Find the token_norms .npy file — prefer image-name, fall back to index."""
-    if image_name:
-        p = os.path.join(explain_dir, f"{image_name}_token_norms.npy")
-        if os.path.exists(p):
-            return p
-    p = os.path.join(explain_dir, f"sample_{sample_idx:05d}_token_norms.npy")
+def resolve_norms_path(explain_dir, image_name):
+    """Find the token_norms .npy file by image name."""
+    p = os.path.join(explain_dir, f"{image_name}_token_norms.npy")
     if os.path.exists(p):
         return p
     raise FileNotFoundError(
-        f"No token_norms .npy for sample {sample_idx} "
-        f"(image_name={image_name}) in {explain_dir}"
+        f"No token_norms .npy for '{image_name}' in {explain_dir}"
     )
 
 
@@ -159,7 +154,7 @@ def visualize_sample(row, explain_dir, save_dir, alpha=0.45, dpi=150):
     H_img, W_img = img_np.shape
 
     # ── Load token norms ─────────────────────────────────────────────
-    norms_path = resolve_norms_path(explain_dir, sample_idx, image_name)
+    norms_path = resolve_norms_path(explain_dir, image_name)
     token_norms = np.load(norms_path).reshape(-1)
 
     reg_norms = token_norms[:num_registers]

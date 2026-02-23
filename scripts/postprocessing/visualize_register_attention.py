@@ -90,27 +90,21 @@ def load_meta(csv_path):
     return rows
 
 
-def resolve_npy_path(explain_dir, sample_idx, suffix, image_name=None):
+def resolve_npy_path(explain_dir, suffix, image_name):
     """
-    Find a .npy file — prefer image-name prefix, fall back to sample index.
+    Find a .npy file by image name.
 
     Parameters
     ----------
     explain_dir : str   Path to vit_rgts_explain/
-    sample_idx  : int   Numeric sample index (from CSV)
     suffix      : str   e.g. 'reg_tokens', 'seq_tokens'
-    image_name  : str   Optional image stem for human-friendly naming
+    image_name  : str   Image stem (e.g. 'a01-038-12')
     """
-    if image_name:
-        p = os.path.join(explain_dir, f"{image_name}_{suffix}.npy")
-        if os.path.exists(p):
-            return p
-    p = os.path.join(explain_dir, f"sample_{sample_idx:05d}_{suffix}.npy")
+    p = os.path.join(explain_dir, f"{image_name}_{suffix}.npy")
     if os.path.exists(p):
         return p
     raise FileNotFoundError(
-        f"No {suffix}.npy for sample {sample_idx} "
-        f"(image_name={image_name}) in {explain_dir}"
+        f"No {suffix}.npy for '{image_name}' in {explain_dir}"
     )
 
 
@@ -188,10 +182,8 @@ def visualize_sample(row, explain_dir, save_dir, alpha=0.40, dpi=150):
 
     # ── Load token embeddings ────────────────────────────────────────
     try:
-        reg_path = resolve_npy_path(explain_dir, sample_idx, "reg_tokens",
-                                    image_name)
-        seq_path = resolve_npy_path(explain_dir, sample_idx, "seq_tokens",
-                                    image_name)
+        reg_path = resolve_npy_path(explain_dir, "reg_tokens", image_name)
+        seq_path = resolve_npy_path(explain_dir, "seq_tokens", image_name)
     except FileNotFoundError as e:
         print(f"  [SKIP] {e}")
         return None

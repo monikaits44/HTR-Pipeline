@@ -96,13 +96,9 @@ def load_meta(csv_path):
     return rows
 
 
-def resolve_npy_path(explain_dir, sample_idx, suffix, image_name=None):
-    """Find a .npy file — prefer image-name prefix, fall back to sample index."""
-    if image_name:
-        p = os.path.join(explain_dir, f"{image_name}_{suffix}.npy")
-        if os.path.exists(p):
-            return p
-    p = os.path.join(explain_dir, f"sample_{sample_idx:05d}_{suffix}.npy")
+def resolve_npy_path(explain_dir, suffix, image_name):
+    """Find a .npy file by image name."""
+    p = os.path.join(explain_dir, f"{image_name}_{suffix}.npy")
     if os.path.exists(p):
         return p
     return None  # caller decides how to handle
@@ -143,8 +139,7 @@ def load_embeddings(rows, explain_dir):
             wer = None
 
         # Load register tokens
-        reg_path = resolve_npy_path(explain_dir, sample_idx, "reg_tokens",
-                                    image_name)
+        reg_path = resolve_npy_path(explain_dir, "reg_tokens", image_name)
         if reg_path is None:
             continue
 
