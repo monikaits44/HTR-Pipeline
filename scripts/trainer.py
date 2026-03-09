@@ -15,7 +15,7 @@ from torch.utils.data import DataLoader
 from utils.htr_dataset import HTRDataset
 
 from models import HTRNet
-from utils.transforms import aug_transforms
+from utils.transforms import aug_transforms_cnn, aug_transforms_vit, aug_transforms_vit_strong
 
 import torch.nn.functional as F
 
@@ -25,17 +25,18 @@ import shutil
 from datetime import datetime
 import csv
 import time
+import fcntl
 
 
 def get_next_run_number(experiments_dir):
     """Get the next run number by checking existing run directories."""
     if not os.path.exists(experiments_dir):
         return 1
-    
+
     existing_runs = [d for d in os.listdir(experiments_dir) if d.startswith('run_')]
     if not existing_runs:
         return 1
-    
+
     run_numbers = []
     for run_dir in existing_runs:
         try:
@@ -43,7 +44,7 @@ def get_next_run_number(experiments_dir):
             run_numbers.append(num)
         except (IndexError, ValueError):
             continue
-    
+
     return max(run_numbers) + 1 if run_numbers else 1
 
 
@@ -51,16 +52,26 @@ def setup_experiment_dir(config):
     """
     Create experiment directory structure: saved_models/experiments/run_<n>/
     Returns the experiment directory path and logging file handle.
+
+    Uses an exclusive file lock (.run_lock) to prevent concurrent SLURM array
+    tasks from claiming the same run number simultaneously.
     """
     base_dir = './saved_models'
     experiments_dir = os.path.join(base_dir, 'experiments')
-    
-    # Get next run number
-    run_number = get_next_run_number(experiments_dir)
-    run_dir = os.path.join(experiments_dir, f'run_{run_number}')
-    
-    # Create directory structure
-    os.makedirs(run_dir, exist_ok=True)
+    os.makedirs(experiments_dir, exist_ok=True)
+
+    lock_path = os.path.join(experiments_dir, '.run_lock')
+    with open(lock_path, 'w') as lock_fh:
+        # Acquire exclusive lock — blocks until no other process holds it
+        fcntl.flock(lock_fh, fcntl.LOCK_EX)
+        try:
+            run_number = get_next_run_number(experiments_dir)
+            run_dir = os.path.join(experiments_dir, f'run_{run_number}')
+            # Create directory while still holding the lock so no other
+            # process can scan the same max and pick the same number.
+            os.makedirs(run_dir, exist_ok=False)
+        finally:
+            fcntl.flock(lock_fh, fcntl.LOCK_UN)
     
     # Save config as JSON
     config_dict = OmegaConf.to_container(config, resolve=True)
@@ -127,6 +138,12 @@ class HTRTrainer(nn.Module):
         self.epoch_start_time = None
         self.num_params = 0
         
+        # Setup attention extraction directory for ViT models
+        self.attention_dir = None
+        if experiment_dir is not None:
+            self.attention_dir = os.path.join(experiment_dir, 'attention_weights')
+            os.makedirs(self.attention_dir, exist_ok=True)
+        
         # Setup detailed evaluation CSV file
         if experiment_dir is not None:
             self.eval_csv_path = os.path.join(experiment_dir, 'evaluation_details.csv')
@@ -162,7 +179,53 @@ class HTRTrainer(nn.Module):
         dataset_folder = config.data.path
         fixed_size = (config.preproc.image_height, config.preproc.image_width)
 
-        train_set = HTRDataset(dataset_folder, 'train', fixed_size=fixed_size, transforms=aug_transforms)
+        # ========================================================================
+        # AUTOMATIC AUGMENTATION SELECTION BASED ON ARCHITECTURE
+        # ========================================================================
+        # ViT architectures need stronger augmentation due to low inductive bias
+        arch_type = getattr(config.arch, 'type', 'cnn_rnn')
+        
+        # Check if user explicitly specified augmentation strategy
+        aug_strategy = getattr(config.train, 'augmentation', 'auto')
+        
+        if aug_strategy == 'auto':
+            # Architecture-aware augmentation selection:
+            # - CNN-RNN: Moderate augmentation (proven effective, strong inductive bias)
+            # - ViT from scratch: Strong (needs invariance training, but not TOO strong
+            #   or it destroys signal before the model can learn basics)
+            # - Pretrained ViT/TrOCR: Moderate (pretrained features already robust;
+            #   over-augmenting destroys the distribution the pretrained weights expect)
+            if arch_type == 'cnn_rnn':
+                selected_transforms = aug_transforms_cnn
+                aug_name = 'cnn (moderate)'
+            elif arch_type == 'vit_rgts':
+                selected_transforms = aug_transforms_vit
+                aug_name = 'vit (strong)'
+            elif arch_type in ['torchvision_vit', 'trocr']:
+                selected_transforms = aug_transforms_cnn
+                aug_name = 'cnn (moderate — pretrained model)'
+            else:
+                selected_transforms = aug_transforms_vit
+                aug_name = 'vit (strong — fallback)'
+            self.log(f"🔄 Auto-selected {aug_name} augmentation for {arch_type}")
+        else:
+            # User explicitly specified augmentation strategy (override)
+            if aug_strategy == 'cnn':
+                selected_transforms = aug_transforms_cnn
+                aug_name = 'cnn'
+            elif aug_strategy == 'vit':
+                selected_transforms = aug_transforms_vit
+                aug_name = 'vit'
+            elif aug_strategy == 'vit_strong':
+                selected_transforms = aug_transforms_vit_strong
+                aug_name = 'vit_strong'
+            else:
+                raise ValueError(f"Unknown augmentation strategy: {aug_strategy}")
+            self.log(f"🎯 User-specified augmentation: {aug_name}")
+        
+        self.log(f"📊 Training with {aug_name} augmentation strategy")
+        
+        train_set = HTRDataset(dataset_folder, 'train', fixed_size=fixed_size, transforms=selected_transforms)
         classes = train_set.character_classes
         self.log('# training lines ' + str(train_set.__len__()))
         self.num_train_lines = train_set.__len__()
@@ -238,16 +301,180 @@ class HTRTrainer(nn.Module):
 
     def prepare_optimizers(self):
         config = self.config
-        # Increased weight decay for better regularization
-        optimizer = torch.optim.AdamW(self.net.parameters(), config.train.lr, weight_decay=0.0001)
-
-        self.optimizer = optimizer
-
+        
+        # Architecture-specific optimizer configuration
+        # Each architecture family has different LR, weight decay, and scheduler needs.
+        arch_type = getattr(config.arch, 'type', 'cnn_rnn')
         max_epochs = config.train.num_epochs
-        if config.train.scheduler == 'mstep':
-            self.scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, [int(.5*max_epochs), int(.75*max_epochs)])
+        
+        # ==================================================================
+        # CNN-RNN: Original proven settings (run_32: CER 4.3%)
+        # ==================================================================
+        if arch_type == 'cnn_rnn':
+            lr = config.train.lr  # 0.001
+            weight_decay = 0.00005  # Original weight decay (run_32 setting)
+            
+            optimizer = torch.optim.AdamW(self.net.parameters(), lr, weight_decay=weight_decay)
+            self.optimizer = optimizer
+            
+            # MultiStepLR at [50%, 75%] of training
+            if config.train.scheduler == 'mstep':
+                self.scheduler = torch.optim.lr_scheduler.MultiStepLR(
+                    optimizer, [int(.5*max_epochs), int(.75*max_epochs)]
+                )
+            else:
+                raise NotImplementedError('Alternative schedulers not implemented yet')
+            
+            self.log(f'CNN-RNN optimizer: lr={lr}, weight_decay={weight_decay}, MultiStepLR')
+        
+        # ==================================================================
+        # ViT-RGTS (from scratch): Needs careful small-data training
+        # Higher weight decay (DeiT uses 0.05), lower LR, longer warmup
+        # ==================================================================
+        elif arch_type == 'vit_rgts':
+            use_cnn_stem = getattr(config.arch, 'use_cnn_stem', False)
+            warmup_epochs = 5  # Shorter warmup — model needs to learn fast on small data
+            
+            if use_cnn_stem:
+                # ---- Hybrid CNN-ViT: 3-group differential LR & weight decay ----
+                # CRITICAL FIX (run_49 diagnosis):
+                #   - Old WD (0.01/0.05) was 200-1000x higher than CNN baseline (5e-5)
+                #   - Old LR multipliers (0.5x/0.3x) were too conservative
+                #   - Head (BiLSTM) was lumped with transformer at WD=0.05 — killed RNN learning
+                #
+                # Group 1: CNN stem — learns local features fast, needs moderate WD
+                # Group 2: Transformer — attention/FFN, moderate WD 
+                # Group 3: Head (BiLSTM + projection) — needs high LR, very low WD
+                stem_lr = config.train.lr           # 1e-3 (full LR for CNN stem)
+                transformer_lr = config.train.lr * 0.5  # 5e-4
+                head_lr = config.train.lr           # 1e-3 (head must learn fast)
+                stem_wd = 0.0005       # Was 0.01 — reduced 20x
+                transformer_wd = 0.005  # Was 0.05 — reduced 10x
+                head_wd = 0.0001       # Very low — RNNs are sensitive to WD
+                
+                stem_params = list(self.net.backbone.cnn_stem.parameters()) + \
+                              list(self.net.backbone.stem_pool.parameters())
+                # Transformer backbone params (excluding CNN stem)
+                transformer_params = [p for n, p in self.net.backbone.named_parameters()
+                                       if 'cnn_stem' not in n and 'stem_pool' not in n]
+                # Head params (BiLSTM + projection) — separate group
+                head_params = list(self.net.top.parameters())
+                
+                optimizer = torch.optim.AdamW([
+                    {'params': stem_params, 'lr': stem_lr, 'weight_decay': stem_wd},
+                    {'params': transformer_params, 'lr': transformer_lr, 'weight_decay': transformer_wd},
+                    {'params': head_params, 'lr': head_lr, 'weight_decay': head_wd},
+                ])
+                self.log(f'ViT-RGTS (CNN stem) optimizer:')
+                self.log(f'  stem:        lr={stem_lr}, wd={stem_wd}')
+                self.log(f'  transformer: lr={transformer_lr}, wd={transformer_wd}')
+                self.log(f'  head:        lr={head_lr}, wd={head_wd}')
+            else:
+                # ---- Original from-scratch ViT: single LR ----
+                lr = config.train.lr * 0.5  # 5e-4 (was 0.3x)
+                weight_decay = 0.005  # Was 0.05 — reduced 10x
+                optimizer = torch.optim.AdamW(self.net.parameters(), lr, weight_decay=weight_decay)
+                self.log(f'ViT-RGTS optimizer: lr={lr}, weight_decay={weight_decay}')
+            
+            self.optimizer = optimizer
+            
+            warmup_scheduler = torch.optim.lr_scheduler.LinearLR(
+                optimizer, start_factor=0.1, end_factor=1.0, total_iters=warmup_epochs
+            )
+            cosine_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+                optimizer, T_max=max_epochs - warmup_epochs, eta_min=1e-6
+            )
+            self.scheduler = torch.optim.lr_scheduler.SequentialLR(
+                optimizer, schedulers=[warmup_scheduler, cosine_scheduler],
+                milestones=[warmup_epochs]
+            )
+            
+            self.log(f'  warmup={warmup_epochs} epochs (start_factor=0.1) + cosine annealing')
+        
+        # ==================================================================
+        # TorchVision ViT (pretrained): DIFFERENTIAL learning rates
+        # Backbone (pretrained) gets very low LR to preserve features.
+        # Head (new, random) gets higher LR to learn CTC mapping.
+        # ==================================================================
+        elif arch_type == 'torchvision_vit':
+            backbone_lr = 2e-5   # Very low for pretrained backbone
+            head_lr = 5e-4       # Higher for new CTC head
+            backbone_wd = 0.01   # Standard for pretrained ViT fine-tuning
+            head_wd = 0.0001     # Lower for new head
+            warmup_epochs = 5
+            
+            # Separate parameters: backbone vs head + gray_to_rgb
+            backbone_params = list(self.net.backbone.vit.parameters())
+            head_params = list(self.net.top.parameters())
+            adapter_params = list(self.net.backbone.gray_to_rgb.parameters())
+            
+            # Add register token params if present
+            if hasattr(self.net.backbone, 'register_tokens'):
+                adapter_params += [self.net.backbone.register_tokens]
+            
+            optimizer = torch.optim.AdamW([
+                {'params': backbone_params, 'lr': backbone_lr, 'weight_decay': backbone_wd},
+                {'params': head_params + adapter_params, 'lr': head_lr, 'weight_decay': head_wd},
+            ])
+            self.optimizer = optimizer
+            
+            warmup_scheduler = torch.optim.lr_scheduler.LinearLR(
+                optimizer, start_factor=0.1, end_factor=1.0, total_iters=warmup_epochs
+            )
+            cosine_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+                optimizer, T_max=max_epochs - warmup_epochs, eta_min=1e-6
+            )
+            self.scheduler = torch.optim.lr_scheduler.SequentialLR(
+                optimizer, schedulers=[warmup_scheduler, cosine_scheduler],
+                milestones=[warmup_epochs]
+            )
+            
+            self.log(f'TorchVision ViT optimizer: backbone_lr={backbone_lr}, head_lr={head_lr}, '
+                     f'backbone_wd={backbone_wd}, warmup={warmup_epochs} epochs')
+        
+        # ==================================================================
+        # TrOCR (pretrained, encoder frozen by default): Only train head
+        # If encoder is frozen, we only need optimizer for head params.
+        # If encoder is unfrozen, use differential LR like TorchVision ViT.
+        # ==================================================================
+        elif arch_type == 'trocr':
+            freeze_encoder = getattr(config.arch, 'freeze_encoder', True)
+            warmup_epochs = 3
+            
+            if freeze_encoder:
+                # Only head params are trainable
+                head_lr = 5e-4
+                head_wd = 0.0001
+                trainable_params = [p for p in self.net.parameters() if p.requires_grad]
+                optimizer = torch.optim.AdamW(trainable_params, lr=head_lr, weight_decay=head_wd)
+                self.log(f'TrOCR optimizer (encoder frozen): head_lr={head_lr}, head_wd={head_wd}')
+            else:
+                # Differential LR: low for encoder, higher for head
+                encoder_lr = 3e-5
+                head_lr = 5e-4
+                encoder_params = list(self.net.backbone.encoder.parameters())
+                head_params = list(self.net.top.parameters()) + list(self.net.backbone.gray_to_rgb.parameters())
+                optimizer = torch.optim.AdamW([
+                    {'params': encoder_params, 'lr': encoder_lr, 'weight_decay': 0.01},
+                    {'params': head_params, 'lr': head_lr, 'weight_decay': 0.0001},
+                ])
+                self.log(f'TrOCR optimizer (encoder unfrozen): encoder_lr={encoder_lr}, head_lr={head_lr}')
+            
+            self.optimizer = optimizer
+            
+            warmup_scheduler = torch.optim.lr_scheduler.LinearLR(
+                optimizer, start_factor=0.1, end_factor=1.0, total_iters=warmup_epochs
+            )
+            cosine_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+                optimizer, T_max=max_epochs - warmup_epochs, eta_min=1e-6
+            )
+            self.scheduler = torch.optim.lr_scheduler.SequentialLR(
+                optimizer, schedulers=[warmup_scheduler, cosine_scheduler],
+                milestones=[warmup_epochs]
+            )
+        
         else:
-            raise NotImplementedError('Alternative schedulers not implemented yet')
+            raise ValueError(f"Unknown architecture type for optimizer: {arch_type}")
 
     def decode(self, tdec, tdict, blank_id=0):
         
@@ -266,12 +493,22 @@ class HTRTrainer(nn.Module):
         self.net.eval()
         with torch.no_grad():
             tst_o = self.net(img)
-            if self.config.arch.head_type == 'both':
+            # In eval mode, CTCtopB always returns a single tensor
+            # No need to unpack tuple - forward() handles this internally
+            if isinstance(tst_o, tuple):
                 tst_o = tst_o[0]
 
         self.net.train()
 
-        tdec = tst_o.argmax(2).permute(1, 0).cpu().numpy()
+        # Handle different output shapes
+        if tst_o.dim() == 3:
+            # Standard CTC output: [seq_len, batch, classes]
+            tdec = tst_o.argmax(2).permute(1, 0).cpu().numpy()
+        elif tst_o.dim() == 2:
+            # Already 2D: [seq_len, classes] or [batch, classes]
+            tdec = tst_o.argmax(1).cpu().numpy()
+        else:
+            raise ValueError(f"Unexpected output dimension: {tst_o.dim()}, shape: {tst_o.shape}")
         # Handle single batch case - ensure tdec is 1D array not scalar
         if tdec.ndim > 1:
             tdec = tdec.squeeze(0)
@@ -292,11 +529,22 @@ class HTRTrainer(nn.Module):
         # Start epoch timer
         self.epoch_start_time = time.time()
         self.train_losses = []
+        
+        # Gradient accumulation for ViT models (effective batch = batch_size * accum_steps)
+        # ViTs benefit from larger effective batch sizes for stable training.
+        # CNN-RNN uses accum_steps=1 (no accumulation, matches run_32 behavior).
+        arch_type = getattr(config.arch, 'type', 'cnn_rnn')
+        accum_steps = getattr(config.train, 'gradient_accumulation', 
+                              2 if arch_type in ['vit_rgts', 'torchvision_vit', 'trocr'] else 1)
+        effective_batch = config.train.batch_size * accum_steps
+        if accum_steps > 1:
+            self.log(f'Using gradient accumulation: {accum_steps} steps, effective batch size: {effective_batch}')
 
         t = tqdm.tqdm(self.loaders['train'], file=self.tqdm_logger if self.tqdm_logger else None)
         t.set_description('Epoch {}'.format(epoch))
+        self.optimizer.zero_grad()  # Zero grad once at start
+        
         for iter_idx, (img, transcr) in enumerate(t):
-            self.optimizer.zero_grad()
 
             img = img.to(device)
 
@@ -322,19 +570,159 @@ class HTRTrainer(nn.Module):
             if config.arch.head_type == "both":
                 loss_val += 0.1 * self.ctc_loss(aux_output, labels, act_lens, label_lens)
 
-            tloss_val = loss_val.item()
+            # Scale loss by accumulation steps for correct gradient magnitude
+            scaled_loss = loss_val / accum_steps
+            
+            tloss_val = loss_val.item()  # Log unscaled loss for readability
             self.train_losses.append(tloss_val)
         
-            loss_val.backward()
+            scaled_loss.backward()
             
-            # Gradient clipping for training stability
-            torch.nn.utils.clip_grad_norm_(self.net.parameters(), max_norm=5.0)
-            
-            self.optimizer.step()    
+            # Step optimizer every accum_steps iterations (or at end of epoch)
+            if (iter_idx + 1) % accum_steps == 0 or (iter_idx + 1) == len(self.loaders['train']):
+                # Gradient clipping for ViT training stability only
+                # CNN-RNN does not need gradient clipping (matches run_32 behavior)
+                if arch_type in ['vit_rgts', 'torchvision_vit', 'trocr']:
+                    torch.nn.utils.clip_grad_norm_(self.net.parameters(), max_norm=10.0)
+                
+                self.optimizer.step()
+                self.optimizer.zero_grad()
 
             t.set_postfix(values='loss : {:.2f}'.format(tloss_val))
 
         self.sample_decoding()
+    
+    def extract_attention_weights(self, epoch, dataset='val', num_samples=5):
+        """Extract and save attention weights from ViT models during training."""
+        
+        config = self.config
+        device = config.device
+        
+        # Only extract attention for ViT architectures
+        arch_type = getattr(config.arch, 'type', 'cnn_rnn')
+        if arch_type not in ['vit_rgts', 'torchvision_vit', 'trocr']:
+            return  # Skip for CNN-RNN
+        
+        if self.attention_dir is None:
+            return  # No attention directory setup
+        
+        self.log(f'Extracting attention weights for {arch_type} at epoch {epoch}...')
+        
+        # Get loader
+        if dataset == 'val':
+            loader = self.loaders['val']
+        elif dataset == 'test':
+            loader = self.loaders['test']
+        else:
+            loader = self.loaders['train']
+        
+        self.net.eval()
+        
+        # Create epoch-specific directory
+        epoch_attn_dir = os.path.join(self.attention_dir, f'epoch_{epoch:03d}')
+        os.makedirs(epoch_attn_dir, exist_ok=True)
+        
+        sample_count = 0
+        attention_stats = {
+            'num_layers': 0,
+            'num_heads': 0,
+            'avg_attention_entropy': [],
+            'avg_token_norms': []
+        }
+        
+        for batch_idx, (imgs, transcrs) in enumerate(loader):
+            if sample_count >= num_samples:
+                break
+            
+            imgs = imgs.to(device)
+            batch_size = imgs.size(0)
+            
+            with torch.no_grad():
+                # Use forward_explain to get attention maps
+                try:
+                    if arch_type == 'vit_rgts':
+                        logits, reg_tokens, attn_maps, token_norms, grid = self.net.forward_explain(imgs)
+                    elif arch_type == 'torchvision_vit':
+                        logits, reg_tokens, attn_maps, token_norms, grid = self.net.forward_explain(imgs)
+                    elif arch_type == 'trocr':
+                        logits, _, attn_maps, token_norms, grid = self.net.forward_explain(imgs)
+                except Exception as e:
+                    self.log(f'Warning: Could not extract attention: {str(e)}')
+                    return
+            
+            # Save attention maps for each sample in batch
+            for sample_idx in range(min(batch_size, num_samples - sample_count)):
+                sample_id = sample_count + sample_idx
+                
+                # Save attention maps (one file per layer)
+                for layer_idx, attn in enumerate(attn_maps):
+                    # attn shape: [B, H, S, S]
+                    attn_sample = attn[sample_idx].cpu().numpy()  # [H, S, S]
+                    
+                    filename = f'sample_{sample_id:03d}_layer_{layer_idx:02d}.npy'
+                    filepath = os.path.join(epoch_attn_dir, filename)
+                    np.save(filepath, attn_sample)
+                
+                # Save token norms
+                if token_norms is not None:
+                    norms_sample = token_norms[sample_idx].cpu().numpy()
+                    filename = f'sample_{sample_id:03d}_token_norms.npy'
+                    filepath = os.path.join(epoch_attn_dir, filename)
+                    np.save(filepath, norms_sample)
+                
+                # Save register tokens if available
+                if reg_tokens is not None:
+                    reg_sample = reg_tokens[sample_idx].cpu().numpy()
+                    filename = f'sample_{sample_id:03d}_register_tokens.npy'
+                    filepath = os.path.join(epoch_attn_dir, filename)
+                    np.save(filepath, reg_sample)
+                
+                # Save ground truth
+                gt_filename = f'sample_{sample_id:03d}_groundtruth.txt'
+                gt_filepath = os.path.join(epoch_attn_dir, gt_filename)
+                with open(gt_filepath, 'w') as f:
+                    f.write(transcrs[sample_idx])
+            
+            # Update stats
+            if len(attn_maps) > 0:
+                attention_stats['num_layers'] = len(attn_maps)
+                attention_stats['num_heads'] = attn_maps[0].shape[1]
+                
+                # Calculate attention entropy (measure of focus)
+                for attn in attn_maps:
+                    # Average over batch, heads, and source positions
+                    attn_probs = attn.mean(dim=(0, 1, 2))  # [S]
+                    entropy = -(attn_probs * torch.log(attn_probs + 1e-10)).sum().item()
+                    attention_stats['avg_attention_entropy'].append(entropy)
+                
+                # Average token norms
+                if token_norms is not None:
+                    avg_norm = token_norms.mean().item()
+                    attention_stats['avg_token_norms'].append(avg_norm)
+            
+            sample_count += batch_size
+        
+        # Save metadata
+        metadata = {
+            'epoch': epoch,
+            'architecture': arch_type,
+            'num_samples': sample_count,
+            'num_layers': attention_stats['num_layers'],
+            'num_heads': attention_stats['num_heads'],
+            'grid_size': grid if 'grid' in locals() else None,
+            'avg_attention_entropy': np.mean(attention_stats['avg_attention_entropy']) if attention_stats['avg_attention_entropy'] else 0,
+            'avg_token_norm': np.mean(attention_stats['avg_token_norms']) if attention_stats['avg_token_norms'] else 0
+        }
+        
+        import json
+        metadata_path = os.path.join(epoch_attn_dir, 'metadata.json')
+        with open(metadata_path, 'w') as f:
+            json.dump(metadata, f, indent=4)
+        
+        self.log(f'Saved attention weights to: {epoch_attn_dir}')
+        self.log(f'  Layers: {metadata["num_layers"]}, Heads: {metadata["num_heads"]}, Samples: {metadata["num_samples"]}')
+        
+        self.net.train()
     
     def test(self, epoch, tset='test'):
 
@@ -360,8 +748,9 @@ class HTRTrainer(nn.Module):
             imgs = imgs.to(device)
             with torch.no_grad():
                 o = self.net(imgs)
-            # if o tuple keep only the first element
-            if config.arch.head_type == 'both':
+            # In eval mode, CTCtopB returns single tensor
+            # But handle tuple case defensively
+            if isinstance(o, tuple):
                 o = o[0]
             
             tdecs = o.argmax(2).permute(1, 0).cpu().numpy()
@@ -497,6 +886,12 @@ if __name__ == '__main__':
             htr_trainer.save(epoch)
             val_cer, val_wer = htr_trainer.test(epoch, 'val')
             test_cer, test_wer = htr_trainer.test(epoch, 'test')
+            
+            # Extract attention weights for ViT models every 5 epochs
+            arch_type = getattr(config.arch, 'type', 'cnn_rnn')
+            if arch_type in ['vit_rgts', 'torchvision_vit', 'trocr']:
+                if epoch % 5 == 0 or epoch == 1:  # Save at epoch 1, 5, 10, 15, 20, 25, 30
+                    htr_trainer.extract_attention_weights(epoch, dataset='val', num_samples=5)
             
             # Track best model
             if val_cer < best_cer:
