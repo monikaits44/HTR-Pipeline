@@ -1,4 +1,7 @@
 # ViT-RGTS architecture for HTR on IAM (Vision Transformers Need Registers)
+# SIZED FOR SMALL DATA: IAM has only 6,482 training lines.
+# From-scratch ViTs need to be small to avoid overfitting on limited data.
+# Reference: DeiT-Tiny (5M params) needs ImageNet; we target ~500K params.
 arch:
   type: 'vit_rgts'        # Vision Transformer with Register Tokens
 
@@ -6,25 +9,29 @@ arch:
   image_height: 128
   image_width: 1024
 
-  # Patch sizes (16x16 -> 8 x 64 = 512 patches)
-  patch_height: 4
-  patch_width: 64
+  # Patch sizes: 16x16 → 8×64 = 512 patches (standard ViT patch size)
+  # Each 16x16 patch covers roughly one character width — good for CTC.
+  # Previous 8×32 was too wide (2-3 chars per patch, destroying character detail).
+  # Previous 4×64 was too short (only 4 pixels vertical, unreadable features).
+  patch_height: 16
+  patch_width: 16
 
-  # ViT core dimensions
-  dim: 256            # embedding dimension
-  depth: 6            # number of transformer blocks
-  heads: 8
-  mlp_dim: 512
+  # ViT core dimensions — SMALL for 6.5K training samples
+  # dim=128, depth=4 → ~500K backbone params (vs ~8M with dim=256, depth=12)
+  dim: 128            # embedding dimension (halved from 256)
+  depth: 4            # transformer layers (reduced from 12; prevents overfitting)
+  heads: 4            # attention heads (proportional to dim: 128/4 = 32 head_dim)
+  mlp_dim: 256        # feedforward dim (2× embed_dim; was 512)
 
   # Register tokens (from the paper - key innovation!)
-  num_registers: 0  # 4 register tokens for global information aggregation
+  num_registers: 0  # Override per experiment: 0, 2, 4, 8, 16
 
-  # Dropouts
-  dropout: 0.1
-  emb_dropout: 0.1
+  # Dropouts — slightly higher for regularization on small data
+  dropout: 0.2
+  emb_dropout: 0.2
 
-  # Head config
+  # Head config — proportionally smaller
   head_type: 'rnn'    # RNN head on top of ViT features
   rnn_type: 'lstm'
-  rnn_layers: 3
-  rnn_hidden_size: 256
+  rnn_layers: 2       # reduced from 3 (proportional to backbone size)
+  rnn_hidden_size: 128 # reduced from 256 (proportional to dim)

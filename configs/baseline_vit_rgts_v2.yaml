@@ -1,0 +1,92 @@
+# =============================================================================
+# ViT-RGTS v2 — Hybrid CNN-Stem + Transformer for HTR
+# =============================================================================
+#
+# Key improvements over v1 (runs 42-46):
+#
+#   1. CNN STEM (use_cnn_stem: true)
+#      Replaces raw 16×16 patch embedding with a 4-layer CNN that:
+#        - Extracts local features (edges, strokes, character parts)
+#        - Collapses image height to 1 → left-to-right token sequence
+#        - 128×1024 → 128 tokens, each spanning ~8px horizontally
+#        - Produces ~3 tokens per character — ideal for CTC alignment
+#      WHY: v1 flattened an 8×64 patch grid row-major, destroying the
+#           left-to-right order CTC needs. CER stuck at 75%.
+#
+#   2. SCALED-UP MODEL (dim=256, depth=6, heads=8)
+#        - v1 used dim=128, depth=4, heads=4 → only 1.3M params
+#        - v2: ~6M params, comparable to CNN baseline (7.4M, CER=5.3%)
+#
+#   3. DUAL CTC HEAD (head_type: both)
+#        - RNN + CNN shortcut for dual supervision (same as run_41)
+#        - 3-layer BiLSTM with hidden=256
+#
+#   4. REGISTER TOKENS for explainability (Darcet et al. 2023)
+#        - Learnable tokens that capture global style/writer info
+#        - Override with: arch.num_registers=0 / 2 / 8 / 16
+#
+# Usage:
+#   python scripts/trainer.py configs/baseline_vit_rgts_v2.yaml
+#
+# Register sweep (override from command line):
+#   python scripts/trainer.py configs/baseline_vit_rgts_v2.yaml arch.num_registers=0
+#   python scripts/trainer.py configs/baseline_vit_rgts_v2.yaml arch.num_registers=2
+#   python scripts/trainer.py configs/baseline_vit_rgts_v2.yaml arch.num_registers=4
+#   python scripts/trainer.py configs/baseline_vit_rgts_v2.yaml arch.num_registers=8
+# =============================================================================
+
+resume: null
+device: cuda:0
+
+data:
+  path: ./data/IAM/processed_lines
+
+preproc:
+  image_height: 128
+  image_width: 1024
+
+train:
+  lr: 0.001           # Effective: stem=5e-4, transformer=3e-4 (set in trainer.py)
+  num_epochs: 80
+  batch_size: 8        # Effective batch = 32 (gradient_accumulation=4 for ViT)
+  scheduler: mstep     # Ignored for vit_rgts — uses warmup+cosine internally
+  save_every_k_epochs: 1
+  num_workers: 8
+  augmentation: cnn    # Moderate augmentation (strong 'vit' aug hurts on small data from scratch)
+
+eval:
+  batch_size: 8
+  num_workers: 8
+  wer_mode: tokenizer
+
+arch:
+  type: vit_rgts
+
+  image_height: 128
+  image_width: 1024
+
+  # ---- CNN Stem (CRITICAL FIX) ----
+  use_cnn_stem: true   # Replaces raw patch embedding with CNN feature extractor
+
+  # Patch settings (only used when use_cnn_stem=false)
+  patch_height: 16
+  patch_width: 16
+
+  # ---- Transformer dimensions (scaled up from v1) ----
+  dim: 256             # v1=128 → v2=256
+  depth: 6             # v1=4   → v2=6
+  heads: 8             # v1=4   → v2=8
+  mlp_dim: 1024        # v1=256 → v2=1024
+
+  # ---- Register tokens (Darcet et al. 2023) ----
+  num_registers: 4     # Override via CLI for sweep
+
+  # ---- Regularization ----
+  dropout: 0.1
+  emb_dropout: 0.1
+
+  # ---- CTC Head ----
+  head_type: both      # Dual supervision: RNN + CNN shortcut (same as run_41)
+  rnn_type: lstm
+  rnn_layers: 3
+  rnn_hidden_size: 256
