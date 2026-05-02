@@ -1,0 +1,832 @@
+Re: Project Progress Update - Improving HTR Attention Maps 
+Contact photo
+From	Chavan, Monika Radhakisan <monika.r.chavan@fau.de>
+To	Vincent Christlein <vincent.christlein@fau.de>
+Date	Mon 21:21
+Summary Headers
+Dear Vincent,
+
+I hope you’re doing well.
+
+I wanted to share a quick update on this week’s progress. The work is currently still in progress, and I am continuing to build on the earlier experiments with register variants and attention analysis.
+
+Overall, things are moving forward, and I expect to consolidate more concrete results soon.
+
+---
+Thanks and Regards,
+Monika Chavan
+
+On 2026-04-13 19:36, Chavan, Monika Radhakisan wrote:Dear Vincent,
+
+I hope you’re doing well.
+
+I wanted to inform you that I will be resuming work on the project starting today. Please let me know if there are any updates or priorities I should be aware of.
+
+Looking forward to continuing the work.
+
+---
+Thanks and Regards,
+Monika Chavan
+
+On 2026-03-17 22:11, Chavan, Monika Radhakisan wrote:Dear Vincent,
+
+Thank you for your wishes :)
+
+---
+Thanks and Regards,
+Monika Chavan
+
+On 2026-03-16 20:59, Vincent Christlein wrote:Dear Monika,
+
+thanks for the update and much success for your exams!
+
+Best,
+Vincent
+
+
+On 3/16/26 7:23 PM, Chavan, Monika Radhakisan wrote:Dear Vincent,
+
+Thanks for your wishes. Due to the event last week, I was not able to make major progress on new implementations, but I continued experimentation with the register variants (reg 0–16) and worked on analyzing the results.
+
+While reviewing the outputs, I found some difficulty interpreting the attention maps. If possible, it would be helpful to have a short discussion on this after the exams.
+
+Next steps planned:
+Attention map visualization and analysis for register variations
+Writer identification implementation
+Adaptation with synthetic data for training
+Fine-tuning the pretrained model
+
+I will pick up the remaining in-progress and upcoming tasks once I am back. I have upcoming exams for ADL and SMAI, so I plan to resume full progress after 4th April. I hope its fine.
+
+---
+Thanks and Regards,
+Monika Chavan
+
+On 2026-03-10 10:12, Vincent Christlein wrote:Dear Monika,
+
+thank you for your update and have fun in Berlin.
+
+Best,
+Vincent
+
+
+On 3/9/26 7:26 PM, Chavan, Monika Radhakisan wrote:Dear Vincent,
+
+Please find below the current status of my work:
+------------------------------------------------------------------------------------ Completed:
+In the Vision Transformers Need Registers paper, 4 registers are recommended for capturing global information (mainly shown for semantic segmentation). To obtain a broader view for our task, I ran experiments with 0–16 register tokens; results are currently under analysis.
+Completed training across the register variants and collected artifacts.
+Continued analysis of attention behavior and character alignment across models (sometimes few results confused me so exploring to have better clarity)
+
+In Progress:
+Analyzing results from the 0–16 register experiments (attention alignment and recognition performance).
+Defining attention map visualizations aligning with Fig. 5 from Beyond Memorization.
+
+Upcoming Steps:
+Extend analysis to more samples for robustness and finalize take on attention map
+Writer identification segment implementation
+Implementing the synthetic data adaption and training strategy
+Fine tunning of pretrained model for HTR
+
+Note: just a quick note that I’ll be traveling to Berlin this week for a scholarship event. I’ll still try to make progress, but in case I’m unable to, I’ll keep you updated accordingly.
+------------------------------------------------------------------------------------ ---
+Thanks and Regards,
+Monika Chavan
+
+On 2026-03-02 19:52, Chavan, Monika Radhakisan wrote:Dear Vincent,
+
+Please find below the current status of my work:
+------------------------------------------------------------------------------------ Completed:
+Conducted comparative analysis of register variants (Reg-0 to Reg-16) using randomly selected short and long text line samples.
+Character Alignment Analysis (refer attached document Analysis: Character Alignment Analysis):
+Short words consistently show stronger diagonal attention patterns.
+Register models (Reg-2 to Reg-16) demonstrate higher diagonality than Reg-0 for short words, indicating improved monotonic reading behavior on simple inputs.
+For long lines, all models exhibit weak diagonality, suggesting difficulty in precise character-level localization for longer sequences.
+
+Attention Rollout Analysis:
+Five models show synchronized, sharp attention alignment closely tracking character-level spatial progression.
+Reg-0 shows more distributed attention compared to register variants.
+
+more detailed observation drafted in document
+
+In Progress:
+Attention maps defining which closely aligning with Fig. 5 from Beyond Memorization.
+Implement finalized synthetic data strategy and rerun experiments
+Refining visualization clarity for better interpretability.
+
+Upcoming Steps:
+Extend analysis to additional samples for robustness validation.
+Integrate alignment and rollout observations into the final experimental comparison.
+Finalize visualization figures for report inclusion.
+
+Backlog:
+Fine-tune TrOCR on the IAM Aachen split.
+
+------------------------------------------------------------------------------------ ---
+Thanks and Regards,
+Monika Chavan
+
+On 2026-02-25 10:42, Chavan, Monika Radhakisan wrote:Dear Vincent,
+
+Thank you for the feedback.
+
+Understood. I currently have an attention map version on Slide 20 (with register comparison), but I will rework the visualization and focus on clearly presenting the attention maps directly, closely aligning with Fig. 5 from Beyond Memorization.
+
+I will also verify how the attention maps were constructed in the paper (CTC vs. CE setting), although I could not find an official implementation reference but will try to figure out.
+
+---
+Thanks and Regards,
+Monika Chavan
+
+On 2026-02-24 23:22, Vincent Christlein wrote:Dear Monika,
+
+this looks quite confusing to me. Why not visualize the attention maps? Please orientate on the paper I sent you (though I don't remember anymore if they used CTC or CE).
+
+Best,
+Vincent
+
+
+On 2/24/26 8:57 PM, Chavan, Monika Radhakisan wrote:Dear Vincent,
+
+Thank you!
+
+Regarding the attention maps yes, I have gathered the current visualization results in the attached presentation under the “Post- Processing” section.
+
+I must admit it may looks a bit messy at the moment , I still need to improve the presentation and make it cleaner and more interpretable.
+
+I would really appreciate your thoughts on the current results and whether the direction looks meaningful from your perspective.
+
+Out of curiosity: when you look at attention maps or Grad-CAM results, what criteria do you use to judge whether they look “good” or not? I would like to build better intuition for evaluating them. (just to understand your approach.)
+
+---
+Thanks and Regards,
+Monika
+
+On 2026-02-23 22:04, Vincent Christlein wrote:Dear Monika,
+
+I am happy that you managed to train your models!
+
+It seems that, performance-wise, the registers don't bring much (which is fine since it wasn't the focus of this project), but have you had a look at the attention maps? Since, in the end, I am mostly interested in those.
+
+Best,
+Vincent
+
+On 2/23/26 9:29 PM, Chavan, Monika Radhakisan wrote:Dear Vincent,
+
+Please find below the current status of my work:
+------------------------------------------------------------------------------------ Completed:
+Experimented with approaches: Vanilla ViT, ViT-RGTS, and CNN+ViT hybrid.
+After configuration refinements, confirmed corrected V2 settings (refer Slide 11) has worked for good results.
+Implemented a new Hybrid CNN–ViT model approach.
+Resolved code-level issue related to the forward_explain method.
+Completed training across all ViT-register hybrid models for 80 epochs and collected corresponding artifacts.
+
+In Progress:
+Preparing final visualization and comparative analysis across models.
+Debugging and refining attention/character-level visualization outputs.
+
+Upcoming Steps:
+Resolve visualization issues and regenerate attention/character plots.
+Implement finalized synthetic data strategy and rerun experiments.
+Proceed with fine-tuning TrOCR on the IAM Aachen split.
+Freeze selected approaches for final results.
+Begin drafting the project report.
+
+Backlog:
+Validate synthetic data outputs with Changhun (pending clarifications).
+Final decision on synthetic data integration strategy (synthetic- only vs. mixed training).
+
+Note:
+This week, I plan to finalize the experimental setup and freeze the approaches for the final results. I will also begin drafting the report. If you have any suggestions regarding outline of projects, model selection or evaluation focus (like anything if you would like to point out), I would greatly appreciate your guidance.
+------------------------------------------------------------------------------------------- ---
+Thanks and Regards,
+Monika
+
+On 2026-02-16 18:38, Chavan, Monika Radhakisan wrote:Dear Vincent,
+
+Please find below the current status of my work:
+------------------------------------------------------------------------------------ Completed:
+Executed experiments with augmentation and patch-dimension modifications (Epoch 50); updated results with last-epoch performance as per defined distribution (Slides 9 & 10) covering all 8 model–configuration combinations.
+Modified and executed character-level visualization (visualize_character_vit.py); outputs generated (attached), though inconsistencies observed.
+
+In Progress:
+Debugging inconsistencies in ViT-based models.
+Investigating issue of identical visualizations across all models (details attached in Word document).
+Finalizing strategy for integrating synthetic data into training.
+
+Upcoming Steps:
+Resolve visualization issues and regenerate attention/character plots.
+Implement finalized synthetic data strategy and rerun experiments.
+Proceed with fine-tuning TrOCR on the IAM Aachen split.
+
+Backlog:
+Validate synthetic data outputs with Changhun (pending clarifications).
+Final decision on synthetic data training strategy (synthetic- only training vs. mixed or other approaches).
+------------------------------------------------------------------------------------------- ---
+Thanks and Regards,
+Monika
+
+On 2026-02-09 20:10, Chavan, Monika Radhakisan wrote:Dear Vincent,
+
+Please find below the current status of my work:
+------------------------------------------------------------------------------------ Completed:
+In HTR augmentation aspects, spent significant time on understanding the synthetic handwritten data generation pipeline end-to-end, including text preprocessing, font validation, rendering, and LMDB storage.
+Executed the synthetic data generation code for HTR; encountered multiple execution issues, debugged errors, and successfully ran the pipeline.
+current status of experiments, updated the training progress presentation (Slide 8) to clearly reflect executions and results for all 8 model–configuration combinations.
+
+Progress/Challenges:
+Debugging to address the observed inconsistencies in ViT based models
+Analyzing the generated outputs to understand structure, quality, and integration readiness.
+Execution was time-intensive, mainly due to large-scale data processing and font/text downloading.
+Faced several runtime and configuration issues during execution, which required iterative debugging.
+Have a few open questions regarding the generated outputs, which I plan to clarify with Changhun.
+
+Upcoming Steps:
+Confirm and validate the generated synthetic data outputs with Changhun, as I have few doubts.
+Decide on the training strategy, specifically how to incorporate synthetic data into the current pipeline (train on synthetic images, validate and test on IAM dataset or other approaches).
+Begin integrating the selected training mode into the existing execution workflow.
+------------------------------------------------------------------------------------------- ---
+Thanks and Regards,
+Monika Chavan
+
+On 2026-01-26 11:40, Vincent Christlein wrote:Dear Monika,
+
+thank you for your update. Yes, typically a lot of augmentation is used. I just contacted Changhun, who should have some data/code regarding this.
+
+Best regards,
+Vincent
+
+
+On 1/25/26 9:13 PM, Chavan, Monika Radhakisan wrote:Dear Vincent,
+
+Please find below the current status of my work:
+------------------------------------------------------------------------------------ Completed:
+Prepared a progress update presentation covering execution and results; attached with this email.
+Confirmed that I am following the Aachen split as per the reference repository (HTR-best-practices
+) for IAM dataset preparation, using predefined train/ validation/test .uttlist files and assigning entire forms to each split.
+Carried out uniform experiments for 30 epochs across the selected models; summary and results can be seen in the attached presentation.
+Decided on the model experiment setup as per the defined format.
+
+In Progress:
+Developing the post-processing script for error correction and evaluation.
+Planning to implement enhanced data augmentation, as the baseline repo uses basic augmentation and our dataset is small, requiring more versatile strategies.
+Preparing attention map comparisons between the models evaluated in the experiments.
+
+Upcoming Steps:
+Complete post-processing scripts and integrate with the experiment pipeline.
+Implement and evaluate advanced data augmentation strategies.
+Generate and analyze attention visualizations across the selected models for comparative interpretability.
+--------------------------------------------------------------------------------------- ---
+Thanks and Regards,
+Monika
+
+On 2026-01-21 20:12, Chavan, Monika Radhakisan wrote:Dear Vincent,
+
+Thank you for the guidance. I will make the repository private and proceed with fine-tuning TrOCR on the IAM Aachen split. I will let you know if I am unable to find a suitable implementation.
+
+---
+Thanks and Regards,
+Monika
+
+On 2026-01-20 22:43, Vincent Christlein wrote:Dear Monika Chavan,
+
+thank you for your update. Yes, maybe make your repository private for now. If the text recognition and/or segmentation works better, we might actually be able to publish it, but let's see, at this stage I cannot not promise anything.
+
+Regarding TrOCR: afaik a pre-trained model is available but it performs poorly out of the box but you can use this to fine-tune on the training set of IAM (here typically, the Aachen split is used, you should find it in some github repository, if not, please let me know).
+
+Best regards,
+Vincent
+
+
+On 1/19/26 10:07 PM, Chavan, Monika Radhakisan wrote:Dear Prof. Vincent,
+
+Thanks for the input, please find below the current status of my work:
+------------------------------------------------------------------------------------ Completed:
+Repository is ready and publicly available for sharing: HTR-Pipeline:https://github.com/monikaits44/HTR-Pipeline (Can make private if confidentiality is preferred)
+Implemented asymmetric patches (4×64) as suggested in Interpretable Writer Recognition via Vector of Locally Aggregated Characters.
+Applied enhanced data augmentation for IAM dataset to improve ViT training on limited data.
+
+Preliminary evaluation summarized in a short table, attached:
+Observation: CNN-RNN performs better due to strong spatial-temporal inductive bias; ViT-RGTS underperforms as transformers need significantly more data to learn sequence alignments effectively.
+
+In Progress:
+Designing detailed experiments for ViT-RGTS and CNN–RNN comparisons
+Working on post-processing segment and error correction pipelines
+Creating scripts for job execution
+
+Upcoming Steps:
+Study and integrate pretrained models for improved baseline performance, considering the models mentioned in attached image for experimentation
+Complete experiment design and begin large-scale runs with enhanced augmentation and asymmetric patches
+------------------------------------------------------------------------------------ ---
+Thanks and Regards,
+Monika Chavan
+
+On 2026-01-17 13:59, Vincent Christlein wrote:Dear Monika Chavan,
+
+thank you for your update. It looks already promising but yes it still needs improvement.
+
+Best regards,
+Vincent
+
+
+
+On 1/12/26 9:58 PM, Chavan, Monika Radhakisan wrote:Dear Prof. Vincent,
+
+Please find below the current status of my work:
+------------------------------------------------------------------------------------ Completed:
+Used a pretrained Vision Transformer (ViT) to extract attention maps for handwriting images.
+Generated character-level attention localization, Visualized and saved character-wise attention maps for qualitative analysis.
+Attached sample results with this email for reference, still needs improvement and aspects reference to fig 5 as suggested, will work on it as per our discussion.
+Identified two relevant survey papers to gain broader insights into Handwritten Text Recognition (HTR), including:
+Advancements and Challenges in Handwritten Text and Handwritten Text Recognition: A Survey.
+
+In Progress:
+Reviewing the identified survey papers to extract key trends, challenges, and methodological insights relevant to HTR and explainability - would be finalizing below architecture for latest version of experiment - baseline CNN-RNN-CTC, ViTRTGS, TorchVisionViT(pretrained), TrOCR
+Expanding analysis of TrOCR and other available pretrained HTR models to better understand their architectures and applicability.
+
+Upcoming Steps:
+Better character visualization and perform a deeper evaluation of TrOCR, focusing on its attention mechanisms and suitability for character-level explainability.
+Compare attention behaviors across different pretrained models.
+Integrate insights from the survey literature into the overall experimental and analysis framework.
+Make sure to ready the repo for the detailed experiment
+---
+Thanks and Regards,
+Monika Chavan
+
+On 2026-01-06 12:03, Chavan, Monika Radhakisan wrote:Dear Prof. Vincent,
+
+Thank you for the feedback. I will work on generating character-level attention maps, specifically following the approach shown in Figure 5 of the 145 Submission paper, as you suggested.
+
+Regarding HPC access, I have submitted the extension request via the provided link.
+
+---
+Thanks and Regards,
+Monika Chavan
+
+On 2026-01-05 20:28, Vincent Christlein wrote:Dear Monika Chavan,
+
+thank you for your update. It seems difficult to judge these attention maps. Can you create such character- based attention maps as in the paper I sent you? (145 Submission.pdf Figure 5)?
+
+Regarding HPC: Please fill out https:// lme34.cs.fau.de/ and apply for an extension.
+
+Best regards,
+Vincent
+
+
+On 1/5/26 7:51 PM, Chavan, Monika Radhakisan wrote:Dear Prof. Vincent,
+
+Please find below the current status of my work:
+------------------------------------------------------------------------------------ Completed:
+
+Experimented with two attention-extraction methods for ViT-based handwriting analysis.
+
+Method 1: Hugging Face ViT:
+Used vit-base-patch16-384 to extract and visualize patch-level feature maps and self-attention.
+Resolved preprocessing issues by correcting grayscale to RGB conversion.
+Generated both per-head and aggregated attention maps on high-resolution (1024×1024) handwritten text images.
+Method 2: TIMM library-based:
+Implemented an independent pipeline using vit_tiny_patch16_224.
+Used forward hooks to capture Q/K projections and manually computed scaled dot-product attention.
+Enabled per-head attention visualization on handwritten text samples.
+
+Attached the corresponding results with this email.
+
+Outcome:
+Validated two complementary attention-extraction strategies (API-based vs. hook-based).
+Resolved key preprocessing and scaling issues.
+
+In Progress:
+Narrowing the experimental scope to three major Hugging Face ViT-based models, as recommended, to maintain consistency and comparability.
+
+Upcoming Steps:
+Apply the same Hugging Face based attention extraction pipeline to the TrOCR model.
+Compare attention behavior across the selected ViT models to better understand architectural differences relevant to HTR.
+---------------------------------------------------------------------------------------- Note :
+I received an email stating that my HPC account (iwi5369h) for the project Studentische Abschlußarbeiten Tier3 Grundversorgung LS Informatik 5 Mustererkennung (Prof. A. Maier) (iwi5101) will soon expire at portal.hpc.fau.de by 7th Jan 2026.
+Could you please confirm or let me know action item from my end for an extension 3 months, as I took a 3-5 week gap in between and will need it to continue further progress?
+---
+Thanks and Regards,
+Monika Chavan
+
+On 2025-12-29 22:44, Chavan, Monika Radhakisan wrote:Dear Prof. Vincent,
+
+Thank you for the suggestion. I will review the Hugging Face TrOCR implementation.
+
+---
+Thanks and Regards,
+Monika Chavan
+
+On 2025-12-29 22:34, Vincent Christlein wrote:Dear Monika Chavan,
+
+thank you for your update. Maybe you can have a look at the Hugging Face implementation of TrOCR that uses a ViT, however, not an RNN-CTC model.
+
+Best,
+Vincent
+
+
+On 12/29/25 10:26 PM, Chavan, Monika Radhakisan wrote:Dear Prof. Vincent,
+
+Please find below the current status of my work:
+------------------------------------------------------------------------------------ Completed:
+Spent this week catching up with earlier progress and consolidating the current experimental setup.
+Executed multiple model variants for 20 epochs to check convergence behavior and stability:
+Baseline:
+CNN–RNN–CTC HTR model
+Variants:
+ViT-based HTR -
+ViT + RNN head (without register tokens)
+ViT + RNN head + register tokens (from Vision Transformers Need Registers) {N= 2,4,8,16}
+
+Observed that the CNN–RNN baseline converges normally, achieving:
+Final CER approx. 4.7%
+WER approx. 16–17%
+Stable CTC alignment with meaningful predictions
+
+In contrast, both ViT-based models fail to learn, with:
+CER/WER remaining = 1.0 throughout training
+Training CTC loss staying very high (approx. 130+)
+No observable improvement when adding register tokens
+
+In Progress:
+Investigating potential causes for the failure of ViT-based models, including:
+CTC alignment issues,
+token-to-sequence mapping and sequence length handling,
+differences in feature normalization and initialization compared to the CNN baseline.
+
+Upcoming Steps:
+Identify and resolve the root cause preventing convergence in the ViT-based pipelines.
+Refine the experimental design to ensure fair and stable comparisons across CNN and ViT architectures.
+Establish a robust baseline setup before proceeding with further architectural or explainability experiments.
+---------------------------------------------------------------------------------------- Thanks and Regards,
+Monika Chavan
+
+On 2025-12-28 11:35, Vincent Christlein wrote:Dear Monika Chavan,
+
+okay, thank you for letting me know.
+
+Best regards,
+Vincent
+
+
+On 12/22/25 11:29 PM, Chavan, Monika Radhakisan wrote:Dear Prof. Vincent,
+
+I would like to inform you that I have rejoined the project starting today.
+
+I will follow up with my work in this week and will provide update accordingly.
+
+---
+Thanks and Regards,
+Monika Chavan
+
+On 2025-12-01 19:54, Chavan, Monika Radhakisan wrote:Dear Prof. Vincent,
+
+Please find below the current status of my work:
+------------------------------------------------------------------------------------ Completed:
+Investigated the issue you pointed out regarding the distorted overlays,
+Originally, I upscaled the 8×64 ViT token grid to the full image size using standard bilinear interpolation.
+This implicitly assumed that the patch grid height corresponds smoothly to the full image height, which is not true in HTR
+Since ViTs for handwriting use rectangular patches with only a few patch rows covering the entire vertical dimension, bilinear upscaling caused the heatmap to be stretched and smeared along the y-axis
+Implemented a patch-aligned expansion method to replace the incorrect upscaling.
+The fix:
+I replaced the upscaling operation with patch- aligned expansion, where each patch row and column is replicated according to its true receptive-field size in the original image.
+This removes the vertical distortion entirely and produces overlays that accurately preserve ViT patch geometry.
+Prepared a side-by-side comparison (“current vs corrected”) showing the improved attention overlays.
+Please find attached samples.
+
+In Progress:
+Refining the register-centric analysis pipeline, with ongoing efforts focused on:
+understanding how register embeddings correlate with prediction quality (CER/WER),
+studying alignment between token-norm patterns and handwriting stroke regions.
+
+Upcoming Steps:
+Modify and extend the feature extraction and artifact collection pipeline
+Implement Grad-CAM–based visualization for interpreting register token behavior
+Use patch-token gradients to highlight image regions most influencing predictions
+Design the overall experiment structure and execution plan to support comprehensive analysis
+------------------------------------------------------------------------------------ Due to preparation and delivery of a scheduled presentation, I will be unavailable for project work until the 15th Dec.
+After that, I will fully resume project work.
+If convenient, I would appreciate having a discussion after 15th Dec to outline the next steps, direction and guidance, so I can continue working efficiently on the project during the holiday period.
+
+---
+Thanks and Regards,
+Monika Chavan
+
+On 2025-11-24 22:12, Chavan, Monika Radhakisan wrote:Dear Prof. Vincent,
+
+Thank you for the feedback. Yes, the overlay seems vertically misaligned - likely due to how the patch grid is stretched along the y- axis. I will investigate and fix the mapping.
+
+---
+Thanks and Regards,
+Monika Chavan
+
+On 2025-11-24 22:06, Vincent Christlein wrote:Dear Monika Chavan,
+
+thank you for your update. This goes definitely in the right direction! I think these Overlays, however, look a little bit odd. I guess you spread it wrongly over the y-axis (= character height) but not sure. Please investigate this.
+
+Best regards,
+Vincent
+
+
+On 11/24/25 9:15 PM, Chavan, Monika Radhakisan wrote:Dear Prof. Vincent,
+
+Please find below the current status of my work:
+------------------------------------------------------------------------------------ Completed:
+Successfully integrated the ViT-RGTS (Vision Transformers Need Registers) architecture into the existing HTR training pipeline
+Completed end-to-end training and evaluation using the ViT-RGTS backbone, generating all key artifacts including:
+model.pt,config.json,per-sample evaluation logs,token embeddings
+Implemented a complete feature extraction pipeline supporting explainability workflows, including:
+extraction of sequence tokens, register tokens, grid shapes, logits, and token norms for all test-set samples
+Executed the baseline setup with 4 register tokens for short-epoch runs
+Established automated generation of structured artifacts for downstream analysis
+Developed an explainability utility featuring Token-Norm Heatmap Visualization, enabling:
+patch-level representation strength inspection, analysis of global vs. local encoding behavior
+Verified that all post-processing tools (evaluate.py, analyze_evaluation.py, demo.py, extraction modules) operate smoothly with the new architecture
+
+Please find attached samples of current execution
+
+In Progress:
+Refining the register-centric analysis pipeline, with ongoing efforts focused on:
+understanding how register embeddings correlate with prediction quality (CER/WER), studying alignment between token-norm patterns and handwriting stroke regions
+Conducting initial qualitative analyses on:
+patch-grid saliency patterns, global style signatures inferred from register tokens
+Preparing baseline visualizations (heatmaps, representation plots) for the explainability section
+
+Upcoming Steps:
+Modify and extend the feature extraction and artifact collection pipeline
+Implement Grad-CAM–based visualization for interpreting register token behavior
+Use patch-token gradients to highlight image regions most influencing predictions
+Design the overall experiment structure and execution plan to support comprehensive analysis
+------------------------------------------------------------------------------------ ---
+Thanks and Regards,
+Monika Chavan
+
+On 2025-11-17 21:51, Chavan, Monika Radhakisan wrote:Dear Prof. Vincent,
+
+Please find below the current status of my work:
+
+------------------------------------------------------------------------------------ In Progress:
+Continuing work on the register-based transformer representation. The implementation is still in progress, and I am focusing on aligning the architectural components with the requirements of register token integration.
+Although I was not able to spend as much time as planned this week, the Advanced Deep Learning (ADL) exercises have been extremely helpful. They are enabling me to better relate the theoretical concepts to practical implementations, especially regarding attention, ViT architectures and representation mechanisms.
+
+Upcoming Steps:
+Continue implementation and refinement of the register-based transformer module.
+Validate the integration strategy with small-scale experiments before incorporating it into the full training pipeline.
+------------------------------------------------------------------------------------ ---
+Thanks and Regards,
+Monika Chavan
+
+On 2025-11-11 14:11, Chavan, Monika Radhakisan wrote:Dear Prof. Vincent,
+
+Thank you for the clarification and appreciate your input. I acknowledge it.
+I will shift my focus accordingly and concentrate on improving attention maps and enhancing interpretability through register tokens, as suggested.
+
+---
+Thanks and Regards,
+Monika Chavan
+
+On 2025-11-11 12:26, Vincent Christlein wrote:Dear Monika Chavan,
+
+thank you for your update. I am actually not interested in other explainable AI but more on a way to improve the attention maps and thus the interpretability with these register tokens. Please focus on that.
+
+Best,
+Vincent
+
+
+On 11/10/25 9:19 PM, Chavan, Monika Radhakisan wrote:Dear Prof. Vincent,
+
+Please find below the current status of my work:
+------------------------------------------------------------------------------------ Completed / In Progress:
+Currently, the model architecture is being read from the config file; planning to move it to a separate file to enhance modularity and maintainability. So eventually to experiment around different model architecture.
+Exploring theoretical aspects of Explainable AI (XAI), specifically LIME, SHAP, and LRP, to understand model interpretability techniques.
+Explored visualization techniques in depth, specifically Grad-CAM and Saliency Maps, for spatial and temporal feature analysis.
+Successfully ran 20 epochs of training locally and attached the results along with model evaluation and visualizations for reference.
+
+Challenges:
+Implementing the register token paper is currently challenging. Working on establishing a base ViT register implementation first and then adding flexibility to integrate varying numbers of register tokens.
+Facing difficulties implementing LIME to support the current repository structure and workflow.
+
+Upcoming Steps:
+Complete the register token integration with the ViT model and validate its impact on attention and performance.
+Resolve LIME implementation issues and integrate XAI analysis into the current pipeline.
+Continue improving the modularity of the repository for easier experimentation and integration of advanced visualization and explainability techniques.
+------------------------------------------------------------------------------------ ---
+Thanks and Regards,
+Monika Chavan
+
+On 2025-11-03 21:13, Chavan, Monika Radhakisan wrote:Dear Prof. Vincent,
+
+Please find below the current status of my work:
+------------------------------------------------------------------------------------ Completed:
+Successfully configured access to the HPC cluster and updated the public key, ensuring seamless connectivity for upcoming large-scale experiments.
+Currently working through the setup process to fully enable job submission capability on the cluster environment.
+
+In Progress:
+Modularizing the existing repository to make the training and evaluation pipelines more structured, reusable, and scalable.
+This includes separating key components such as data preprocessing, model definition, training, and visualization to simplify experimentation and debugging.
+
+Upcoming Steps:
+Initiate full-scale training runs on the HPC cluster to evaluate model performance under extended epochs.
+Continue refining the modular training pipeline to support integration of advanced experiments, including ViT- based attention mechanisms and Explainable AI (XAI) modules.
+Integrate register tokens into the model for improved representation and attention mapping.
+In parallel, continue studying XAI techniques (LIME and SHAP) for model interpretability in HTR systems.
+Explore Vision Transformer (ViT)-based attention mechanisms for potential architectural enhancement.
+Maintain all development artifacts and experiment logs in a dedicated GitHub repository for version tracking and reproducibility.
+------------------------------------------------------------------------------------ ---
+Thanks and Regards,
+Monika Chavan
+
+On 2025-10-28 07:54, Vincent Christlein wrote:Dear Monika Chavan,
+
+thank you for your update.
+
+Best regards,
+Vincent
+
+
+On 10/27/25 7:46 PM, Chavan, Monika Radhakisan wrote:Dear Prof. Vincent,
+
+Please find below the current status of my work:
+------------------------------------------------------------------------------------ - Completed:
+Implemented RNN & CNN Attention Visualization for better interpretability of the HTR model.
+
+CNN-Specific Attention
+* Spatial Feature Visualization
+Extracted convolutional layer activations from the CNN backbone.
+Visualized how the CNN detects spatial patterns such as strokes, edges, and character shapes.
+Displayed feature maps highlighting important regions in the handwritten text.
+
+RNN-Specific Attention
+*Temporal Sequence Attention
+Captured attention weights from the RNN decoder at each time step.
+Showed which input positions the RNN focuses on when generating each character.
+Represented as a heatmap (time steps × input sequence length).
+
+RNN Hidden State Features
+Visualized internal temporal representations from the RNN.
+Illustrated how context flows through the sequence during decoding.
+
+Model Summary:
+The CNN-RNN model effectively combines both spatial and temporal insights:
+CNN → detects where features are spatially.
+RNN → determines when to attend during sequential decoding.
+Attached a few sample visualizations along with this email for reference.
+
+In Progress:
+Still facing issues with HPC setup — public key configuration is pending.
+Currently running experiments locally with a few epochs due to limited resources.
+In parallel, continuing to study Explainable AI (XAI) techniques such as LIME and SHAP for model interpretability in HTR systems.
+
+Upcoming Steps:
+Explore Vision Transformer (ViT)- based attention mechanisms for potential integration.
+Modularize the repository to streamline experimentation and improve reusability.
+
+------------------------------------------------------------------------------------ ---
+Thanks and Regards,
+Monika Chavan
+
+On 2025-10-20 21:17, Chavan, Monika Radhakisan wrote:Dear Prof. Vincent,
+
+Please find below the current status of my work:
+------------------------------------------------------------------------------------ - Completed:
+Successfully executed the repository on the local system and ran the training for 10 epochs.
+The overall repository execution is functioning correctly, confirming the setup and data preparation were successful.
+
+- In Progress:
+Observing areas of improvement in the current training pipeline to enhance model performance and efficiency - will be working on implementing these improvements.
+Working on HPC access setup; public key generation is still pending.
+In parallel, studying Explainable AI (XAI) techniques such as LIME and SHAP to understand their applicability in model interpretability for HTR systems.
+
+- Upcoming Steps:
+Complete HPC access configuration and migrate training from the local system to HPC for extended experiments.
+Evaluate improvements introduced in the training pipeline and analyze their impact on model accuracy and convergence.
+------------------------------------------------------------------------------------ ---
+Thanks and Regards,
+Monika Chavan
+
+On 2025-10-13 18:33, Chavan, Monika Radhakisan wrote:Dear Prof. Vincent,
+
+Please find below the current status of my work:
+
+------------------------------------------------------------------------------------ - Completed:
+Resumed work on the project from today, 13th October.
+Was able to understand the structure and functionality of the GitHub repository.
+Faced an issue while downloading the IAM dataset initially, which has now been resolved.
+Successfully completed the data preparation phase.
+
+- In Progress:
+Currently facing execution issues due to limited GPU resources on the local system.
+Exploring the possibility of running the experiments on the HPC for better computational support.
+In parallel, studying Explainable AI (XAI) techniques such as LIME and SHAP to understand their applicability in model interpretability for HTR systems.
+
+- Upcoming Steps:
+Once access to HPC is configured, proceed with executing the model training and evaluation.
+Document the key results and challenges encountered during the execution phase.
+Additionally, I will be joining the ADL (Advanced Deep Learning) classes offered by you this semester to further strengthen my understanding of model architectures and training methodologies.
+------------------------------------------------------------------------------------ ---
+Thanks and Regards,
+Monika Chavan
+
+On 2025-08-25 21:02, Chavan, Monika Radhakisan wrote:Dear Prof. Vincent,
+
+Please find below the current status of my work:
+
+------------------------------------------------------------------------------------ - Completed:
+Came across a paper associated with the HTR best practices: Best Practices for a Handwritten Text Recognition System
+
+The paper proposes three "best practice" modifications to enhance the training and performance of deep learning-based Handwritten Text Recognition (HTR) systems, specifically using a convolutional-recurrent architecture.
+
+Key modifications include:
+
+Preprocessing – Retaining image aspect ratios with padding
+
+Architectural – Column-wise Max- Pooling for flattening between CNN and recurrent head
+
+Training – Auxiliary CTC shortcut branch to aid training convergence
+
+These enable a basic CNN+LSTM model to achieve competitive results on the IAM and RIMES datasets, often outperforming more complex existing methods.
+
+- In Progress:
+Execution of the cloned repository is currently in progress.
+
+- Upcoming Steps:
+Due to upcoming exams and my participation in the Ferienakademie next month, I will be unavailable for the project and plan to rejoin from 10th October. I will continue from this point onward.
+Meanwhile, if you would like me to prioritize any prominent tasks upon resuming, please let me know.
+------------------------------------------------------------------------------------ ---
+Thanks and Regards,
+Monika Chavan
+
+On 2025-08-18 22:17, Chavan, Monika Radhakisan wrote:Dear Prof. Vincent,
+
+Please find below the current status of my work:
+
+------------------------------------------------------------------------------------ - Completed:
+
+Conducted review of the remaining paper:
+
+Beyond Memorization: Training- Free Style Mixing for Variability in Handwritten Text Generation Using Writer Embedding Injection in Pretrained Diffusion Models: To address these limitations, the authors propose a novel approach that allows for dynamic mixing of different writer styles at the character level during the generation process, enhancing stylistic diversity without the need for retraining the model. Attention-Based Character Localization, Writer Embedding Injection, Dynamic Style Mixing
+
+Cloned the repository locally: GitHub - https://github.com/ georgeretsi/HTR-best-practices/ - In Progress:
+
+Studying the GitHub repository in detail to understand the functionality and execution of the code
+
+Running the code to validate its operations and outputs
+
+- Upcoming Steps:
+
+Notify about the second phase exam schedule (pending)
+
+Summarize the key essence of the GitHub code for reference
+
+Extract datasets used across all reviewed papers
+
+Brainstorm around the approach in Specific to Paper Vision Transformers Need Registers, focusing on the integration of register tokens, potential implementation strategies, and their expected impact on attention maps and overall model performance.
+
+Get more familiarity around topic HTR, XAI in HTR and HTR specific models
+------------------------------------------------------------------------------------ ---
+Thanks and Regards,
+Monika Chavan
+
+On 2025-08-11 17:55, Chavan, Monika Radhakisan wrote:Dear Prof. Vincent,
+
+I would like to share updates after finishing my first half of the exam period, started deeply looking into topic.
+
+------------------------------------------------------------------------------------ - Completed:
+
+Successfully navigated the first half of the exam period.
+
+Conducted an in-depth review of below papers:
+
+Vision Transformers Need Registers: Proposes a solution by adding new tokens, called register tokens, to help the model better process global and local information.
+
+Interpretable Writer Recognition via Vectors of Locally Aggregated Characters (VLAC): Introduces a method called VLAC, which aggregates local features by character to produce interpretable document distances.
+
+- In Progress:
+
+Reviewing the third paper: Beyond Memorization: Training- Free Style Mixing for Variability in Handwritten Text Generation Using Writer Embedding Injection in Pretrained Diffusion Models.
+
+- Upcoming Steps:
+
+Notify about the second phase exam schedule.
+
+Maintain detailed notes for progress tracking on Notion, considering data privacy and confidentiality.
+
+Clone the reference repository provided locally and attempt to run the code to gain practical insights.
+
+Get more familiarity around topic HTR, XAI in HTR and HTR specific models
+------------------------------------------------------------------------------------ ---
+Thanks and Regards,
+Monika Chavan
+
+On 2025-07-14 22:47, Chavan, Monika Radhakisan wrote:Dear Prof. Vincent,
+
+I would like to share a brief update on the progress of the “Improving HTR Attention Maps” project:
+----------------------------------------------------------------------------------------------------------- - Completed:
+Initiated the project by reviewing relevant literature to understand the current approaches
+
+- In Progress:
+Currently focusing on consolidating insights from key papers to define a strong foundation for further understanding
+
+-Upcoming Steps:
+I have examinations scheduled until August 8th, which may limit significant progress during this period.
+Post-exams, I plan to actively lead the project and increase depth in topic.
+------------------------------------------------------------------------------------------------------------ Please let me know if this approach works for you or if any adjustments are needed.

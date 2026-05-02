@@ -1,5 +1,13 @@
 # TrOCR encoder architecture for HTR on IAM
 # Uses pretrained TrOCR encoder from HuggingFace transformers
+#
+# IMPORTANT: TrOCR was designed as encoder-decoder (not CTC). We use only
+# the encoder here with a CTC head, which is suboptimal but compatible with
+# the pipeline. The encoder's pretrained features are still valuable.
+#
+# INPUT HANDLING: Line images (128×1024) are resized to height=384 while
+# preserving aspect ratio, then padded to 384×384. This avoids the
+# destructive 8× horizontal squash that the old square resize caused.
 
 arch:
   type: 'trocr'  # TrOCR encoder (ViT-based)
@@ -11,14 +19,15 @@ arch:
   #   - microsoft/trocr-large-handwritten (largest, most accurate)
   model_name: 'microsoft/trocr-base-handwritten'
 
-  # TrOCR expects square images (default 384x384)
-  # For line images, we resize to square which may distort aspect ratio
-  # Consider using padding or adaptive pooling if aspect ratio is critical
+  # TrOCR uses 384×384 input internally. Our pipeline resizes height to 384,
+  # scales width proportionally, then pads to 384. This preserves aspect ratio.
   image_height: 384
   image_width: 384
 
-  # Encoder freezing (useful for fine-tuning)
-  freeze_encoder: False    # Set to True to freeze TrOCR encoder weights
+  # Freeze pretrained encoder — it's already trained on handwriting data.
+  # Only fine-tune the new CTC head (RNN) on IAM labels.
+  # With 6.5K samples, fine-tuning all 86M encoder params causes overfitting.
+  freeze_encoder: True
 
   # Head configuration
   head_type: 'rnn'         # Options: 'cnn' (linear), 'rnn', 'both'
@@ -27,4 +36,4 @@ arch:
   rnn_hidden_size: 256
 
 # Note: Training settings (lr, num_epochs, batch_size) inherited from config.yaml
-# Override via CLI if needed: train.lr=3e-5 train.batch_size=2
+# Override via CLI if needed: train.lr=5e-4 train.batch_size=4

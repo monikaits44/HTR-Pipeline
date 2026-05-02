@@ -23,3 +23,8 @@ example project/*
 asset/pretrained_models/*
 notebook/*
 documents/*
+output/*
+backup/*
+experiments_execution/logs/*
+visualizations/*
+.gitignore

@@ -1,0 +1,236 @@
+Act as expert and now that you understand my entire repo you have to work on follwoing aspects:
+
+So basically lets focus on the data aspects, 
+right now we have this data /home/hpc/iwi5/iwi5369h/HTR-Pipeline/data/IAM/processed_lines
+which has tranin test validation 
+
+Now I want to introduce syenthetic data which should be downloaed at 
+iwi5369h@tinyx:/home/woody/iwi5/iwi5369h/projects/synth_htr$ 
+from Here is the link for the dataset
+https://drive.google.com/drive/folders/1j_P99ZY1O93rc9B6gwd6Ei98nd2Jt5jq?usp=sharing
+
+and keep shortcut of it in /home/hpc/iwi5/iwi5369h/HTR-Pipeline/data folder named synthetic_data an from there shortcut should be accessible to access data
+
+Now impliement the traning mode where it considers all DATA FROM synthetic_data folder as traning data and test data from folder /home/hpc/iwi5/iwi5369h/HTR-Pipeline/data/IAM/processed_lines/test
+
+make sure this is flag based in config file set appropriate flag so one can switch between these experiments
+
+in terms to support this make respective changes in the all respective code
+make sure its moduler also like having similar fomatting like IAM traning like gt text and line images
+
+
+I plan to investigating the use of register tokens for
+text recognition (actually, I want to get better letter segmentation
+masks).
+
+You can access code related to this from here :
+/home/hpc/iwi5/iwi5369h/HTR-Pipeline/synthetic_data_generation
+
+so impleiment this end to end.
+
+Below is context and email communication related to this :
+Dear Monika,
+
+Sorry for the delay. I’m currently on parental leave for my newborn daughter and been busy to do some works.
+You are on the right way. You are not missing anything. The data size is correct.
+
+You can check my repo to use the lmdb loader. There is a code for that.
+https://github.com/Kimchangheon/DRetHTR
+
+Best Regards,
+Changhun Kim
+-------------------------------
+Changhun Kim, M.Sc. | Computer Science 5 (Pattern Recognition)
+Friedrich-Alexander-Universität Erlangen-Nürnberg | Department of Computer Science
+Martensstr. 3, 91058 Erlangen, Germany
+Tel. +49 9131 85-27872  |  Fax -27270
+changhun.kim@fau.de<mailto:changhun.kim@fau.de>
+https://lme.tf.fau.de/person/chkim/
+
+
+
+From: Chavan, Monika Radhakisan <monika.r.chavan@fau.de>
+Date: Friday, 6. February 2026 at 19:30
+To: Kim, Changhun <changhun.kim@fau.de>
+Cc: Christlein, Vincent <vincent.christlein@fau.de>
+Subject: Re: augmentation
+Dear Changhun,
+
+Thank you for sharing the Google Drive link.
+
+I may be missing something obvious, but after downloading the data I am
+still a bit confused and wanted to quickly double-check to make sure we
+are aligned. As shown in the list below, I see four folders:
+
+10M_merged_synthesized_images_part1.lmdb
+10M_merged_synthesized_images_part2.lmdb
+10M_2_merged_synthesized_images_part1.lmdb
+10M_2_merged_synthesized_images_part2.lmdb
+
+Each is ~116 GB, so I wanted to confirm whether all four are needed and
+what the distinction between 10M and 10M_2 is also why two different
+parts (or if this could be a download/PC-side issue it's challenging to
+download locally on my pc this much amount of data).
+
+I also tried to inspect the .lmdb files directly to better understand
+their contents, but I could not open them successfully. I assume this is
+expected and that the data should only be accessed via the LMDB loader -
+please let me know if that is correct or is there any other way.
+
+Regarding my earlier question, my intention was simply to confirm the
+recommended training setup.
+
+Thanks again for your help, and sorry for the basic clarification
+questions if sounds silly.
+
+---
+Thanks and Regards,
+Monika Chavan
+
+On 2026-02-03 09:35, Kim, Changhun wrote:Here is the link for the dataset
+https://drive.google.com/drive/folders/1j_P99ZY1O93rc9B6gwd6Ei98nd2Jt5jq?usp=sharing
+-------------------------------
+Changhun Kim, M.Sc. | Computer Science 5 (Pattern Recognition)
+Friedrich-Alexander-Universität Erlangen-Nürnberg | Department of
+Computer Science
+Martensstr. 3, 91058 Erlangen, Germany
+Tel. +49 9131 85-27872  |  Fax -27270
+changhun.kim@fau.de<mailto:changhun.kim@fau.de>
+https://lme.tf.fau.de/person/chkim/
+
+
+
+From: Kim, Changhun <changhun.kim@fau.de>
+Date: Monday, 2. February 2026 at 21:18
+To: Chavan, Monika Radhakisan <monika.r.chavan@fau.de>
+Cc: Christlein, Vincent <vincent.christlein@fau.de>
+Subject: RE: augmentation
+Dear Monika
+
+Your result looks reasonable and even get more valid fonts than me from
+my case it was around 10k fonts.
+But I couldn’t understand your question regarding this :
+- Using the images directly from the `synthesized_images` folder as the
+dataset, or
+- Extracting images and ground-truth labels from the
+`synthesized_images_100K.lmdb` database (which contains ~99,954
+samples)?
+And regarding transfer the data from my hpc to storage to your storage,
+I thought it would be easy however, as I checked we have no access
+permission to other’s storage.
+So I will share you the google drive link once it’s uploading is done.
+
+And you can just simply download this dataset and use my lmdbdataset
+loader from the code.
+Best regards,
+Changhun
+-------------------------------
+Changhun Kim, M.Sc. | Computer Science 5 (Pattern Recognition)
+Friedrich-Alexander-Universität Erlangen-Nürnberg | Department of
+Computer Science
+Martensstr. 3, 91058 Erlangen, Germany
+Tel. +49 9131 85-27872  |  Fax -27270
+changhun.kim@fau.de<mailto:changhun.kim@fau.de>
+https://lme.tf.fau.de/person/chkim/
+
+
+
+From: Chavan, Monika Radhakisan <monika.r.chavan@fau.de>
+Date: Sunday, 1. February 2026 at 20:13
+To: Kim, Changhun <changhun.kim@fau.de>
+Cc: Christlein, Vincent <vincent.christlein@fau.de>
+Subject: Re: augmentation
+Dear Changhun,
+
+I wanted to give insights of the synthetic handwritten data generation
+pipeline and ask for your guidance on a few points.
+
+After making several modifications to ensure compatibility with the HPC
+environment and following extensive debugging, code edits, and error
+corrections I was able to execute the entire pipeline step by step
+successfully.
+
+After execution, I obtained the following results in the synthetic
+folder (please refer to the attached screenshots for details):
+
+- Valid fonts remaining: 21,029 font files
+- Valid fonts (supporting all required characters): 16,895 fonts
+- Total images in the `synthesized_images` folder: 20,797
+
+I have also attached a screenshot showing the image generation
+statistics (e.g., total processed images, successful generations, and
+failures and distribution).
+
+Could you please confirm whether these outputs look reasonable and if I
+am proceeding in the right direction? I wanted to check if anything
+appears unexpected or suspicious in the results.
+
+Additionally, I have one key question regarding the next steps:
+For consistency with the IAM dataset setup, should I proceed by:
+
+- Using the images directly from the `synthesized_images` folder as the
+dataset, or
+- Extracting images and ground-truth labels from the
+`synthesized_images_100K.lmdb` database (which contains ~99,954
+samples)?
+
+Your suggestion on the recommended approach would be very helpful
+before
+I move forward with training.
+
+Thank you for your time, and I look forward to your feedback.
+
+Best regards,
+Monika
+
+
+---
+Thanks and Regards,
+Monika Chavan
+
+On 2026-01-29 09:49, Chavan, Monika Radhakisan wrote:Dear Changhun,
+
+Thank you for sharing the code. I will have a look at the repository
+and review the implementation. In case of any questions or concerns, I
+hope I may reach out to you.
+
+I would also like to confirm that I do have an HPC account, so a
+transfer via that route would work well.
+
+---
+Thanks and Regards,
+Monika Chavan
+
+On 2026-01-27 14:50, Kim, Changhun wrote:Dear Monika,
+
+Here is the code for the synthetic data creation. You can unzip this
+and find “synthetic_data_generation” directory.
+If you need the data, please contact me. If you have HPC account, we
+can transfer with ease.
+
+Best regards,
+Changhun Kim
+-------------------------------
+Changhun Kim, M.Sc. | Computer Science 5 (Pattern Recognition)
+Friedrich-Alexander-Universität Erlangen-Nürnberg | Department of
+Computer Science
+Martensstr. 3, 91058 Erlangen, Germany
+Tel. +49 9131 85-27872  |  Fax -27270
+changhun.kim@fau.de<mailto:changhun.kim@fau.de>
+https://lme.tf.fau.de/person/chkim/
+
+
+
+On 26.01.26, 11:39, "Christlein, Vincent" <vincent.christlein@fau.de>
+wrote:
+Dear Changhun,
+
+can you please give the data (or code) for the synthetic data
+creation
+to Monika. She is currently investigating the use of register tokens
+for
+text recognition (actually, I want to get better letter segmentation
+masks).
+
+Best regards,
+Vincent 

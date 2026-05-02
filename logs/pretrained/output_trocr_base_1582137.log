@@ -1,0 +1,93 @@
+### Starting TaskPrologue of job 1582137 on tg084 at Thu Apr 23 07:18:34 PM CEST 2026
+Running on cores 12-13,28-29,44-45,60-61 with governor powersave
+Thu Apr 23 19:18:34 2026       
++-----------------------------------------------------------------------------------------+
+| NVIDIA-SMI 580.126.20             Driver Version: 580.126.20     CUDA Version: 13.0     |
++-----------------------------------------+------------------------+----------------------+
+| GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
+|                                         |                        |               MIG M. |
+|=========================================+========================+======================|
+|   0  NVIDIA GeForce RTX 3080        On  |   00000000:DA:00.0 Off |                  N/A |
+| 30%   35C    P8             21W /  300W |       1MiB /  10240MiB |      0%      Default |
+|                                         |                        |                  N/A |
++-----------------------------------------+------------------------+----------------------+
+
++-----------------------------------------------------------------------------------------+
+| Processes:                                                                              |
+|  GPU   GI   CI              PID   Type   Process name                        GPU Memory |
+|        ID   ID                                                               Usage      |
+|=========================================================================================|
+|  No running processes found                                                             |
++-----------------------------------------------------------------------------------------+
+### Finished TaskPrologue
+
+=========================================
+Starting TrOCR Base Handwritten
+Started at: Thu Apr 23 07:18:34 PM CEST 2026
+=========================================
+
+================================================================================
+Starting Experiment: run_72
+Experiment Directory: ./saved_models/experiments/run_72
+================================================================================
+
+🔄 Auto-selected cnn (moderate — pretrained model) augmentation for trocr
+📊 Training with cnn (moderate — pretrained model) augmentation strategy
+Character classes: [' ', '!', '"', '#', '&', "'", '(', ')', '*', '+', ',', '-', '.', '/', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', ':', ';', '?', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z'] (79 different characters)
+# training lines 6482
+Character classes: [' ', '!', '"', '#', "'", '(', ')', '*', ',', '-', '.', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', ':', ';', '?', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z'] (76 different characters)
+# validation lines 976
+Character classes: [' ', '!', '"', '#', '&', "'", '(', ')', '*', ',', '-', '.', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', ':', ';', '?', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'Y', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z'] (75 different characters)
+# testing lines 2915
+charset size: 79
+Preparing Net - Architectural elements:
+{'type': 'trocr', 'model_name': 'microsoft/trocr-base-handwritten', 'image_height': 384, 'image_width': 384, 'freeze_encoder': True, 'head_type': 'rnn', 'rnn_type': 'lstm', 'rnn_layers': 2, 'rnn_hidden_size': 256}
+Loading TrOCR model: microsoft/trocr-base-handwritten
+Cache directory: /home/hpc/iwi5/iwi5369h/HTR-Pipeline/asset/pretrained_models/trocr
+Attempting to load from local cache (offline mode)...
+✓ Successfully loaded from local cache
+TrOCR model loaded successfully
+Number of parameters: 3720275
+TrOCR optimizer (encoder frozen): head_lr=0.0005, head_wd=0.0001
+Training Started!
+####################### Evaluating test set at epoch 0 #######################
+CER at epoch 0: 4.239
+WER at epoch 0: 7.800
+Using gradient accumulation: 2 steps, effective batch size: 16
+orig:: time they docked at Belleray. And though Guy,
+pred:: e
+####################### Saving model at epoch 1 #######################
+Model saved to: ./saved_models/experiments/run_72/model.pt
+####################### Evaluating val set at epoch 1 #######################
+CER at epoch 1: 0.997
+WER at epoch 1: 1.000
+####################### Evaluating test set at epoch 1 #######################
+CER at epoch 1: 0.997
+WER at epoch 1: 1.000
+Extracting attention weights for trocr at epoch 1...
+=========================================
+Completed at: Thu Apr 23 07:42:53 PM CEST 2026
+=========================================
+=== JOB_STATISTICS ===
+=== current date     : Thu Apr 23 07:42:53 PM CEST 2026
+= Job-ID             : 1582137 on tinygpu
+= Job-Name           : trocr_base
+= Job-Command        : /home/hpc/iwi5/iwi5369h/HTR-Pipeline/experiments_execution/slurm_scripts/08_trocr_base.slurm
+= Initial workdir    : /home/hpc/iwi5/iwi5369h/HTR-Pipeline/experiments_execution
+= Queue/Partition    : rtx3080
+= Slurm account      : iwi5 with QOS=normal
+= Requested resources:  for 04:00:00
+= Elapsed runtime    : 00:24:19
+= Total RAM usage    : 2.6 GiB of requested  GiB (%)   
+= Node list          : tg084
+= Subm/Elig/Start/End: 2026-04-23T11:59:50 / 2026-04-23T11:59:50 / 2026-04-23T19:18:34 / 2026-04-23T19:42:53
+======================
+=== Quota infos ======
+    Path                 Used     SoftQ    HardQ    Gracetime  Filec    FileQ    FiHaQ    FileGrace    
+    /home/hpc              78.1G   104.9G   209.7G        N/A     110K     500K   1,000K        N/A    
+    /home/woody            20.8G  1000.0G  1500.0G        N/A  46,816    5,000K   7,500K        N/A    
+======================
+=== GPU utilization ==
+gpu_name, gpu_bus_id, pid, gpu_utilization [%], mem_utilization [%], max_memory_usage [MiB], time [ms]
+NVIDIA GeForce RTX 3080, 00000000:DA:00.0, 1127628, 90 %, 34 %, 4214 MiB, 276814 ms

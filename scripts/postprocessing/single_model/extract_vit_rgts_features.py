@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 """
+write git commit msg -
+update: Extract ViT-RGTS features for post-hoc analysis
 Extract ViT-RGTS Features for Post-hoc Analysis
 
 Runs the trained ViT-RGTS model and extracts per-sample:
@@ -71,6 +73,20 @@ Usage:
         configs/config.yaml configs/baseline.yaml configs/baseline_vit_rgts_v2.yaml \\
         arch.num_registers=16 \\
         resume=saved_models/experiments/run_54/model.pt device=cuda
+
+    # ── With explicit ground truth file (fills gt_text, cer, wer) ────
+    python scripts/postprocessing/extract_vit_rgts_features.py \\
+        configs/config.yaml configs/baseline.yaml configs/baseline_vit_rgts_v2.yaml \\
+        arch.num_registers=16 \\
+        resume=saved_models/experiments/run_54/model.pt \\
+        gt=notebook/sample_images/gt.txt \\
+        -- notebook/sample_images/
+
+    # NOTE: A gt.txt in the same folder as the images is found automatically.
+    # gt.txt format (one line per image, tab or space separated):
+    #   <image_stem>  <ground_truth_text>
+    # Example:
+    #   a01-038-12 talks.
 """
 import os
 import sys
@@ -166,6 +182,67 @@ def collect_image_paths(paths):
         else:
             print(f'Warning: skipping {p} (not a file or directory)')
     return result
+
+
+def load_gt_file(path):
+    """
+    Load a ground truth file into a dict {image_stem: gt_text}.
+
+    Supported format (one entry per line):
+        <image_stem><whitespace><ground_truth_text>
+    Example:
+        a01-038-12 talks.
+        c04-110-00 Become a success...
+    Lines starting with '#' are ignored.
+    """
+    gt = {}
+    with open(path, encoding='utf-8') as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith('#'):
+                continue
+            parts = line.split(None, 1)   # split on first whitespace
+            if len(parts) == 2:
+                gt[parts[0]] = parts[1]
+            elif len(parts) == 1:
+                gt[parts[0]] = ''         # image with empty GT
+    return gt
+
+
+def find_gt_for_images(image_paths, explicit_gt_path=None):
+    """
+    Locate and load ground truth for a list of image paths.
+
+    Priority:
+        1. explicit_gt_path (from gt= CLI override)
+        2. gt.txt auto-detected in the same directory as the images
+
+    Returns a dict {image_stem: gt_text}, may be empty if no GT found.
+    """
+    # Explicit path takes top priority
+    if explicit_gt_path:
+        if not os.path.isfile(explicit_gt_path):
+            print(f'Warning: specified gt file not found: {explicit_gt_path}')
+            return {}
+        print(f'Ground truth : {explicit_gt_path}')
+        return load_gt_file(explicit_gt_path)
+
+    # Auto-detect gt.txt in each unique image directory
+    gt = {}
+    seen_dirs = set()
+    for img_path in image_paths:
+        d = os.path.dirname(os.path.abspath(img_path))
+        if d in seen_dirs:
+            continue
+        seen_dirs.add(d)
+        candidate = os.path.join(d, 'gt.txt')
+        if os.path.isfile(candidate):
+            print(f'Ground truth : {candidate} (auto-detected)')
+            gt.update(load_gt_file(candidate))
+
+    if not gt:
+        print('Ground truth : none (gt_text, cer, wer will be empty)')
+    return gt
 
 
 # ── Model loading ────────────────────────────────────────────────────────────
@@ -271,41 +348,28 @@ def extract_sample_features(net, img_tensor, device, extract_attention=False):
 
 # ── Save features for one sample ─────────────────────────────────────────────
 
-def save_sample_features(out_dir, sample_idx, features, image_name=None):
+def save_sample_features(out_dir, image_name, features):
     """
-    Save .npy files for one sample.
+    Save .npy files for one sample using the image name as prefix.
 
-    Always saves with sample_{XXXXX}_ prefix (numeric index) for downstream
-    script compatibility.  If image_name is provided, also saves with the
-    image name as prefix for easy human lookup.
+    Files saved:
+      {image_name}_reg_tokens.npy   — register token embeddings [1, R, D]
+      {image_name}_seq_tokens.npy   — patch token embeddings    [T, 1, D]
+      {image_name}_token_norms.npy  — L2 norms per token        [R+T]
+      {image_name}_logits.npy       — CTC logits                [T, 1, C]
+      {image_name}_attn_maps.npy    — attention maps (optional)
     """
-    tag = f"sample_{sample_idx:05d}"
-
-    np.save(os.path.join(out_dir, f"{tag}_reg_tokens.npy"),
+    np.save(os.path.join(out_dir, f"{image_name}_reg_tokens.npy"),
             features['reg_tokens'])
-    np.save(os.path.join(out_dir, f"{tag}_seq_tokens.npy"),
+    np.save(os.path.join(out_dir, f"{image_name}_seq_tokens.npy"),
             features['seq_tokens'])
-    np.save(os.path.join(out_dir, f"{tag}_token_norms.npy"),
+    np.save(os.path.join(out_dir, f"{image_name}_token_norms.npy"),
             features['token_norms'])
-    np.save(os.path.join(out_dir, f"{tag}_logits.npy"),
+    np.save(os.path.join(out_dir, f"{image_name}_logits.npy"),
             features['logits'])
     if 'attn_maps' in features:
-        np.save(os.path.join(out_dir, f"{tag}_attn_maps.npy"),
+        np.save(os.path.join(out_dir, f"{image_name}_attn_maps.npy"),
                 features['attn_maps'], allow_pickle=True)
-
-    # Also save with image name (symlink-friendly lookup)
-    if image_name is not None:
-        for suffix in ['reg_tokens', 'seq_tokens', 'token_norms', 'logits']:
-            src = os.path.join(out_dir, f"{tag}_{suffix}.npy")
-            dst = os.path.join(out_dir, f"{image_name}_{suffix}.npy")
-            if not os.path.exists(dst):
-                # Copy instead of symlink for portability
-                np.save(dst, np.load(src, allow_pickle=True))
-        if 'attn_maps' in features:
-            src = os.path.join(out_dir, f"{tag}_attn_maps.npy")
-            dst = os.path.join(out_dir, f"{image_name}_attn_maps.npy")
-            if not os.path.exists(dst):
-                np.save(dst, np.load(src, allow_pickle=True), allow_pickle=True)
 
 
 # ── Test-set mode ────────────────────────────────────────────────────────────
@@ -364,8 +428,9 @@ def run_test_set_mode(net, config, device, out_dir, extract_attention):
         cer_meter.update(pred_text, gt_text)
         wer_meter.update(pred_text, gt_text)
 
-        # Save .npy files (numeric index only — image name from dataset path)
-        save_sample_features(out_dir, sample_idx, features)
+        # Save .npy files using image name as prefix
+        image_name = Path(img_path).stem
+        save_sample_features(out_dir, image_name, features)
 
         # CSV row
         Hp, Wp = features['grid_size']
@@ -407,6 +472,14 @@ def run_image_mode(net, config, device, out_dir, image_paths, extract_attention)
     classes = np.load(os.path.join(dataset_folder, "classes.npy"))
     i2c = {(i + 1): c for i, c in enumerate(classes)}
 
+    # Ground truth: explicit gt= override or auto-detect gt.txt in image dirs
+    explicit_gt = getattr(config, 'gt', None)
+    gt_dict = find_gt_for_images(image_paths, explicit_gt_path=explicit_gt)
+
+    cer_meter = CER()
+    wer_meter = WER(mode=config.eval.wer_mode)
+    has_gt = bool(gt_dict)
+
     # CSV metadata (same schema for downstream compatibility)
     csv_path = os.path.join(out_dir, "vit_rgts_features.csv")
     csv_f = open(csv_path, "w", encoding="utf-8", newline="")
@@ -436,27 +509,45 @@ def run_image_mode(net, config, device, out_dir, image_paths, extract_attention)
         tdec = features['logits'].argmax(2).transpose(1, 0).squeeze()
         pred_text = ctc_decode(tdec, i2c).strip()
 
-        # Save .npy files — numeric index + image name for easy lookup
-        save_sample_features(out_dir, sample_idx, features,
-                             image_name=image_name)
+        # Ground truth + metrics (if available)
+        gt_text = gt_dict.get(image_name, '')
+        if gt_text:
+            cer_s = CER()
+            wer_s = WER(mode=config.eval.wer_mode)
+            cer_s.update(pred_text, gt_text)
+            wer_s.update(pred_text, gt_text)
+            cer_val = f'{cer_s.score():.6f}'
+            wer_val = f'{wer_s.score():.6f}'
+            cer_meter.update(pred_text, gt_text)
+            wer_meter.update(pred_text, gt_text)
+        else:
+            cer_val = ''
+            wer_val = ''
 
-        # CSV row (gt_text empty — no ground truth for ad-hoc images)
+        # Save .npy files using image name as prefix
+        save_sample_features(out_dir, image_name, features)
+
+        # CSV row
         Hp, Wp = features['grid_size']
         writer.writerow([
-            int(sample_idx), img_path, "", pred_text,
-            "", "",
+            int(sample_idx), img_path, gt_text, pred_text,
+            cer_val, wer_val,
             int(features['reg_tokens'].shape[1]),
             int(features['seq_tokens'].shape[0]),
             int(Hp), int(Wp),
         ])
         csv_f.flush()
 
-        tqdm.tqdm.write(f'  {image_name:>40s}  ->  "{pred_text}"')
+        tqdm.tqdm.write(f'  {image_name:>40s}  ->  "{pred_text}"'
+                        + (f'  (GT: "{gt_text}")' if gt_text else ''))
 
     csv_f.close()
 
     print(f'\nImage extraction complete!')
     print(f'  Images : {len(image_paths)}')
+    if has_gt and cer_meter.total_len > 0:
+        print(f'  CER    : {cer_meter.score():.4f}')
+        print(f'  WER    : {wer_meter.score():.4f}')
     print(f'  CSV    : {csv_path}')
 
 
@@ -503,6 +594,9 @@ def main():
     print(f'Output dir   : {out_dir}')
     print(f'Attention    : '
           f'{"yes (forward_explain)" if extract_attention else "no (backbone only)"}')
+    gt_spec = getattr(config, 'gt', None)
+    if gt_spec:
+        print(f'GT file      : {gt_spec}')
     print(f'Timestamp    : {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}')
     print()
 

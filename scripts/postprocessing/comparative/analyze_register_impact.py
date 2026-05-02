@@ -360,7 +360,7 @@ def main():
     parser.add_argument(
         '--output-dir',
         type=str,
-        default='./output/register_analysis',
+        default='./visualizations/register_analysis',
         help='Directory to save analysis plots'
     )
     parser.add_argument(

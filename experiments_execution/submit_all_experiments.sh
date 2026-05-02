@@ -1,6 +1,6 @@
-#!/bin/bash
 
 # Master script to submit all experiments step by step
+# Can be run either directly (./submit_all_experiments.sh) or via sbatch
 # This script submits jobs sequentially to avoid overloading the cluster
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -27,20 +27,31 @@ submit_job() {
     local description=$2
     local wait_flag=$3
     
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Submitting: $description"
+    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    echo "[$timestamp] Submitting: $description"
     
     if [ "$wait_flag" = "wait" ]; then
         # Submit with dependency on previous job
-        job_id=$(sbatch --parsable "$script")
-        echo "  Job ID: $job_id"
-        echo "  Status: Queued/Running"
+        job_id=$(sbatch --parsable "$script" 2>&1)
+        if [[ $job_id =~ ^[0-9]+$ ]]; then
+            echo "  Job ID: $job_id"
+            echo "  Status: Queued/Running"
+        else
+            echo "  Error: $job_id"
+            return 1
+        fi
         echo ""
         echo "$job_id"
     else
         # Submit without dependency
-        job_id=$(sbatch --parsable "$script")
-        echo "  Job ID: $job_id"
-        echo "  Status: Queued"
+        job_id=$(sbatch --parsable "$script" 2>&1)
+        if [[ $job_id =~ ^[0-9]+$ ]]; then
+            echo "  Job ID: $job_id"
+            echo "  Status: Queued"
+        else
+            echo "  Error: $job_id"
+            return 1
+        fi
         echo ""
         echo "$job_id"
     fi
@@ -52,29 +63,49 @@ submit_with_dependency() {
     local description=$2
     local dependency=$3
     
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Submitting: $description"
+    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    echo "[$timestamp] Submitting: $description"
     
     if [ -n "$dependency" ]; then
-        job_id=$(sbatch --parsable --dependency=afterany:$dependency "$script")
-        echo "  Job ID: $job_id"
-        echo "  Dependency: $dependency"
-        echo "  Status: Queued (will start after previous job)"
+        job_id=$(sbatch --parsable --dependency=afterany:$dependency "$script" 2>&1)
+        if [[ $job_id =~ ^[0-9]+$ ]]; then
+            echo "  Job ID: $job_id"
+            echo "  Dependency: $dependency"
+            echo "  Status: Queued (will start after previous job)"
+        else
+            echo "  Error: $job_id"
+            return 1
+        fi
     else
-        job_id=$(sbatch --parsable "$script")
-        echo "  Job ID: $job_id"
-        echo "  Status: Queued"
+        job_id=$(sbatch --parsable "$script" 2>&1)
+        if [[ $job_id =~ ^[0-9]+$ ]]; then
+            echo "  Job ID: $job_id"
+            echo "  Status: Queued"
+        else
+            echo "  Error: $job_id"
+            return 1
+        fi
     fi
     echo ""
     echo "$job_id"
 }
 
-# Ask user for submission mode
-echo "Select submission mode:"
-echo "  1) Sequential (each job waits for previous to complete)"
-echo "  2) Parallel (all jobs submitted at once)"
-echo "  3) Manual (submit one at a time with confirmation)"
-echo ""
-read -p "Enter choice [1-3]: " mode
+# Determine submission mode
+# If run via sbatch, default to parallel mode (no user interaction)
+# If run directly, ask user
+if [ -n "$SLURM_JOB_ID" ]; then
+    echo "Running via SLURM batch job (ID: $SLURM_JOB_ID)"
+    echo "Defaulting to Parallel mode (all jobs submitted at once)"
+    mode=2
+else
+    # Ask user for submission mode
+    echo "Select submission mode:"
+    echo "  1) Sequential (each job waits for previous to complete)"
+    echo "  2) Parallel (all jobs submitted at once)"
+    echo "  3) Manual (submit one at a time with confirmation)"
+    echo ""
+    read -p "Enter choice [1-3]: " mode
+fi
 
 case $mode in
     1)

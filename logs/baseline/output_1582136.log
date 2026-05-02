@@ -1,0 +1,996 @@
+### Starting TaskPrologue of job 1582136 on tg084 at Thu Apr 23 07:18:34 PM CEST 2026
+Running on cores 6-7,22-23,38-39,54-55 with governor powersave
+Thu Apr 23 19:18:34 2026       
++-----------------------------------------------------------------------------------------+
+| NVIDIA-SMI 580.126.20             Driver Version: 580.126.20     CUDA Version: 13.0     |
++-----------------------------------------+------------------------+----------------------+
+| GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
+|                                         |                        |               MIG M. |
+|=========================================+========================+======================|
+|   0  NVIDIA GeForce RTX 3080        On  |   00000000:3E:00.0 Off |                  N/A |
+| 30%   36C    P8             20W /  300W |       1MiB /  10240MiB |      0%      Default |
+|                                         |                        |                  N/A |
++-----------------------------------------+------------------------+----------------------+
+
++-----------------------------------------------------------------------------------------+
+| Processes:                                                                              |
+|  GPU   GI   CI              PID   Type   Process name                        GPU Memory |
+|        ID   ID                                                               Usage      |
+|=========================================================================================|
+|  No running processes found                                                             |
++-----------------------------------------------------------------------------------------+
+### Finished TaskPrologue
+
+=========================================
+Starting Baseline CNN-RNN Training
+Started at: Thu Apr 23 07:18:34 PM CEST 2026
+=========================================
+
+================================================================================
+Starting Experiment: run_73
+Experiment Directory: ./saved_models/experiments/run_73
+================================================================================
+
+🔄 Auto-selected cnn (moderate) augmentation for cnn_rnn
+📊 Training with cnn (moderate) augmentation strategy
+Character classes: [' ', '!', '"', '#', '&', "'", '(', ')', '*', '+', ',', '-', '.', '/', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', ':', ';', '?', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z'] (79 different characters)
+# training lines 6482
+Character classes: [' ', '!', '"', '#', "'", '(', ')', '*', ',', '-', '.', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', ':', ';', '?', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z'] (76 different characters)
+# validation lines 976
+Character classes: [' ', '!', '"', '#', '&', "'", '(', ')', '*', ',', '-', '.', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', ':', ';', '?', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'Y', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z'] (75 different characters)
+# testing lines 2915
+charset size: 79
+Preparing Net - Architectural elements:
+{'type': 'cnn_rnn', 'cnn_cfg': [[2, 64], 'M', [3, 128], 'M', [2, 256]], 'head_type': 'both', 'rnn_type': 'lstm', 'rnn_layers': 3, 'rnn_hidden_size': 256, 'flattening': 'maxpool', 'stn': False}
+Number of parameters: 7363168
+CNN-RNN optimizer: lr=0.001, weight_decay=5e-05, MultiStepLR
+Training Started!
+####################### Evaluating test set at epoch 0 #######################
+CER at epoch 0: 0.984
+WER at epoch 0: 1.000
+orig:: the conductor said firmly. "Contrary to the
+pred:: te e t d t t t the
+####################### Saving model at epoch 1 #######################
+Model saved to: ./saved_models/experiments/run_73/model.pt
+####################### Evaluating val set at epoch 1 #######################
+CER at epoch 1: 0.699
+WER at epoch 1: 0.957
+####################### Evaluating test set at epoch 1 #######################
+CER at epoch 1: 0.707
+WER at epoch 1: 0.960
+
+*** New best CER: 0.699 at epoch 1 ***
+
+orig:: I'm such a dull fellow, really." "Dull?" She
+pred:: im sucha dull felow, realy. wulls she
+####################### Saving model at epoch 2 #######################
+Model saved to: ./saved_models/experiments/run_73/model.pt
+####################### Evaluating val set at epoch 2 #######################
+CER at epoch 2: 0.226
+WER at epoch 2: 0.586
+####################### Evaluating test set at epoch 2 #######################
+CER at epoch 2: 0.281
+WER at epoch 2: 0.652
+
+*** New best CER: 0.226 at epoch 2 ***
+
+orig:: with university records, the agents of the
+pred:: with university records, the sgentsof the
+####################### Saving model at epoch 3 #######################
+Model saved to: ./saved_models/experiments/run_73/model.pt
+####################### Evaluating val set at epoch 3 #######################
+CER at epoch 3: 0.148
+WER at epoch 3: 0.441
+####################### Evaluating test set at epoch 3 #######################
+CER at epoch 3: 0.182
+WER at epoch 3: 0.507
+
+*** New best CER: 0.148 at epoch 3 ***
+
+orig:: "Oh, he wasn't. His motor-bike had
+pred:: " on, he wasn't- this motor-bike had
+####################### Saving model at epoch 4 #######################
+Model saved to: ./saved_models/experiments/run_73/model.pt
+####################### Evaluating val set at epoch 4 #######################
+CER at epoch 4: 0.123
+WER at epoch 4: 0.375
+####################### Evaluating test set at epoch 4 #######################
+CER at epoch 4: 0.158
+WER at epoch 4: 0.446
+
+*** New best CER: 0.123 at epoch 4 ***
+
+orig:: for 178 words out of 279, which is
+pred:: Sur TTs words cuf of 2T5, which is
+####################### Saving model at epoch 5 #######################
+Model saved to: ./saved_models/experiments/run_73/model.pt
+####################### Evaluating val set at epoch 5 #######################
+CER at epoch 5: 0.108
+WER at epoch 5: 0.333
+####################### Evaluating test set at epoch 5 #######################
+CER at epoch 5: 0.136
+WER at epoch 5: 0.396
+
+*** New best CER: 0.108 at epoch 5 ***
+
+orig:: white mice served alive, dipped in treacle
+pred:: white mice served alive, dipped in treacle
+####################### Saving model at epoch 6 #######################
+Model saved to: ./saved_models/experiments/run_73/model.pt
+####################### Evaluating val set at epoch 6 #######################
+CER at epoch 6: 0.086
+WER at epoch 6: 0.278
+####################### Evaluating test set at epoch 6 #######################
+CER at epoch 6: 0.109
+WER at epoch 6: 0.339
+
+*** New best CER: 0.086 at epoch 6 ***
+
+orig:: But the jet aircraft was already miles away,
+pred:: But the jet civcruft was alveardy mites away,
+####################### Saving model at epoch 7 #######################
+Model saved to: ./saved_models/experiments/run_73/model.pt
+####################### Evaluating val set at epoch 7 #######################
+CER at epoch 7: 0.079
+WER at epoch 7: 0.258
+####################### Evaluating test set at epoch 7 #######################
+CER at epoch 7: 0.107
+WER at epoch 7: 0.327
+
+*** New best CER: 0.079 at epoch 7 ***
+
+orig:: 1913 soon after I had come, and he organized the Mission
+pred:: wars soon after I had come, and he organized she Mission
+####################### Saving model at epoch 8 #######################
+Model saved to: ./saved_models/experiments/run_73/model.pt
+####################### Evaluating val set at epoch 8 #######################
+CER at epoch 8: 0.080
+WER at epoch 8: 0.263
+####################### Evaluating test set at epoch 8 #######################
+CER at epoch 8: 0.105
+WER at epoch 8: 0.326
+orig:: the world, is it?" "For me it is," Dai
+pred:: thr nosld, is it 2" "for mor it is," Dai
+####################### Saving model at epoch 9 #######################
+Model saved to: ./saved_models/experiments/run_73/model.pt
+####################### Evaluating val set at epoch 9 #######################
+CER at epoch 9: 0.066
+WER at epoch 9: 0.229
+####################### Evaluating test set at epoch 9 #######################
+CER at epoch 9: 0.090
+WER at epoch 9: 0.293
+
+*** New best CER: 0.066 at epoch 9 ***
+
+orig:: Dai Pugh, taking a tearful farewell of
+pred:: Bai Pugh, tahing a tear ful farnal of
+####################### Saving model at epoch 10 #######################
+Model saved to: ./saved_models/experiments/run_73/model.pt
+####################### Evaluating val set at epoch 10 #######################
+CER at epoch 10: 0.069
+WER at epoch 10: 0.230
+####################### Evaluating test set at epoch 10 #######################
+CER at epoch 10: 0.089
+WER at epoch 10: 0.287
+orig:: blessing that Jacky's off to boarding school.
+pred:: blessing that facly's off to boarding shool.
+####################### Saving model at epoch 11 #######################
+Model saved to: ./saved_models/experiments/run_73/model.pt
+####################### Evaluating val set at epoch 11 #######################
+CER at epoch 11: 0.066
+WER at epoch 11: 0.221
+####################### Evaluating test set at epoch 11 #######################
+CER at epoch 11: 0.086
+WER at epoch 11: 0.274
+
+*** New best CER: 0.066 at epoch 11 ***
+
+orig:: sense alone. Having exhausted their invention
+pred:: sense alone. Having exhausted their invention
+####################### Saving model at epoch 12 #######################
+Model saved to: ./saved_models/experiments/run_73/model.pt
+####################### Evaluating val set at epoch 12 #######################
+CER at epoch 12: 0.058
+WER at epoch 12: 0.199
+####################### Evaluating test set at epoch 12 #######################
+CER at epoch 12: 0.079
+WER at epoch 12: 0.264
+
+*** New best CER: 0.058 at epoch 12 ***
+
+orig:: in Sussex, in all its obscene details. Then the radio
+pred:: in Sussex, in all its obreene details. Then the radio
+####################### Saving model at epoch 13 #######################
+Model saved to: ./saved_models/experiments/run_73/model.pt
+####################### Evaluating val set at epoch 13 #######################
+CER at epoch 13: 0.058
+WER at epoch 13: 0.200
+####################### Evaluating test set at epoch 13 #######################
+CER at epoch 13: 0.080
+WER at epoch 13: 0.262
+orig:: one of the miners who'd come along with
+pred:: one of the miners who'd come along with
+####################### Saving model at epoch 14 #######################
+Model saved to: ./saved_models/experiments/run_73/model.pt
+####################### Evaluating val set at epoch 14 #######################
+CER at epoch 14: 0.056
+WER at epoch 14: 0.191
+####################### Evaluating test set at epoch 14 #######################
+CER at epoch 14: 0.077
+WER at epoch 14: 0.250
+
+*** New best CER: 0.056 at epoch 14 ***
+
+orig:: And third, to study these damned Thetans.
+pred:: And thirt, to study these dautred The tans.
+####################### Saving model at epoch 15 #######################
+Model saved to: ./saved_models/experiments/run_73/model.pt
+####################### Evaluating val set at epoch 15 #######################
+CER at epoch 15: 0.068
+WER at epoch 15: 0.228
+####################### Evaluating test set at epoch 15 #######################
+CER at epoch 15: 0.093
+WER at epoch 15: 0.283
+orig:: or B in the finals next May, and since mating
+pred:: or B in the finals next May, and since mating
+####################### Saving model at epoch 16 #######################
+Model saved to: ./saved_models/experiments/run_73/model.pt
+####################### Evaluating val set at epoch 16 #######################
+CER at epoch 16: 0.056
+WER at epoch 16: 0.195
+####################### Evaluating test set at epoch 16 #######################
+CER at epoch 16: 0.080
+WER at epoch 16: 0.259
+orig:: injustice of this method had been to a certain degree
+pred:: injustice of this method had been to a cestain degree
+####################### Saving model at epoch 17 #######################
+Model saved to: ./saved_models/experiments/run_73/model.pt
+####################### Evaluating val set at epoch 17 #######################
+CER at epoch 17: 0.058
+WER at epoch 17: 0.203
+####################### Evaluating test set at epoch 17 #######################
+CER at epoch 17: 0.082
+WER at epoch 17: 0.262
+orig:: and their lunar and earthly repercussions, to luck
+pred:: and their lnar and earthly repercussions, to luch
+####################### Saving model at epoch 18 #######################
+Model saved to: ./saved_models/experiments/run_73/model.pt
+####################### Evaluating val set at epoch 18 #######################
+CER at epoch 18: 0.056
+WER at epoch 18: 0.189
+####################### Evaluating test set at epoch 18 #######################
+CER at epoch 18: 0.072
+WER at epoch 18: 0.236
+
+*** New best CER: 0.056 at epoch 18 ***
+
+orig:: been used to seeing couples engaged in
+pred:: been used to seeing couples engaged in
+####################### Saving model at epoch 19 #######################
+Model saved to: ./saved_models/experiments/run_73/model.pt
+####################### Evaluating val set at epoch 19 #######################
+CER at epoch 19: 0.050
+WER at epoch 19: 0.177
+####################### Evaluating test set at epoch 19 #######################
+CER at epoch 19: 0.071
+WER at epoch 19: 0.231
+
+*** New best CER: 0.050 at epoch 19 ***
+
+orig:: Dr. John Leake, who lived at Blackheath, and was
+pred:: Dr John Leake, who lived at Blackheath, and was
+####################### Saving model at epoch 20 #######################
+Model saved to: ./saved_models/experiments/run_73/model.pt
+####################### Evaluating val set at epoch 20 #######################
+CER at epoch 20: 0.053
+WER at epoch 20: 0.179
+####################### Evaluating test set at epoch 20 #######################
+CER at epoch 20: 0.075
+WER at epoch 20: 0.241
+orig:: doctor would be free during the day; tea was served
+pred:: doctor would be free during the day; tea was served
+####################### Saving model at epoch 21 #######################
+Model saved to: ./saved_models/experiments/run_73/model.pt
+####################### Evaluating val set at epoch 21 #######################
+CER at epoch 21: 0.049
+WER at epoch 21: 0.171
+####################### Evaluating test set at epoch 21 #######################
+CER at epoch 21: 0.071
+WER at epoch 21: 0.235
+
+*** New best CER: 0.049 at epoch 21 ***
+
+orig:: water to make him swim when he is born.
+pred:: water to make him sarim when he is Sam.
+####################### Saving model at epoch 22 #######################
+Model saved to: ./saved_models/experiments/run_73/model.pt
+####################### Evaluating val set at epoch 22 #######################
+CER at epoch 22: 0.047
+WER at epoch 22: 0.165
+####################### Evaluating test set at epoch 22 #######################
+CER at epoch 22: 0.067
+WER at epoch 22: 0.226
+
+*** New best CER: 0.047 at epoch 22 ***
+
+orig:: one to take?
+pred:: one to take?
+####################### Saving model at epoch 23 #######################
+Model saved to: ./saved_models/experiments/run_73/model.pt
+####################### Evaluating val set at epoch 23 #######################
+CER at epoch 23: 0.049
+WER at epoch 23: 0.165
+####################### Evaluating test set at epoch 23 #######################
+CER at epoch 23: 0.069
+WER at epoch 23: 0.230
+orig:: "That's sure bad news," said Dowd, sombrely.
+pred:: "That's sure bad news," said Dowd, sombrely.
+####################### Saving model at epoch 24 #######################
+Model saved to: ./saved_models/experiments/run_73/model.pt
+####################### Evaluating val set at epoch 24 #######################
+CER at epoch 24: 0.052
+WER at epoch 24: 0.180
+####################### Evaluating test set at epoch 24 #######################
+CER at epoch 24: 0.073
+WER at epoch 24: 0.240
+orig:: And we want all to eat and drink His Great Philosophy of the
+pred:: And we wan alt to ear and drink His Grear Philosofhy of the
+####################### Saving model at epoch 25 #######################
+Model saved to: ./saved_models/experiments/run_73/model.pt
+####################### Evaluating val set at epoch 25 #######################
+CER at epoch 25: 0.046
+WER at epoch 25: 0.160
+####################### Evaluating test set at epoch 25 #######################
+CER at epoch 25: 0.065
+WER at epoch 25: 0.217
+
+*** New best CER: 0.046 at epoch 25 ***
+
+orig:: more exquisite and ethereal enjoyment to
+pred:: more exquisite and ethereal enjoyment to
+####################### Saving model at epoch 26 #######################
+Model saved to: ./saved_models/experiments/run_73/model.pt
+####################### Evaluating val set at epoch 26 #######################
+CER at epoch 26: 0.048
+WER at epoch 26: 0.164
+####################### Evaluating test set at epoch 26 #######################
+CER at epoch 26: 0.065
+WER at epoch 26: 0.215
+orig:: at their desserts the number of flowers
+pred:: at their dessests the mumbert of flowers
+####################### Saving model at epoch 27 #######################
+Model saved to: ./saved_models/experiments/run_73/model.pt
+####################### Evaluating val set at epoch 27 #######################
+CER at epoch 27: 0.049
+WER at epoch 27: 0.169
+####################### Evaluating test set at epoch 27 #######################
+CER at epoch 27: 0.068
+WER at epoch 27: 0.225
+orig:: watched the workmen constructing
+pred:: wakoked the workmen conshncking
+####################### Saving model at epoch 28 #######################
+Model saved to: ./saved_models/experiments/run_73/model.pt
+####################### Evaluating val set at epoch 28 #######################
+CER at epoch 28: 0.046
+WER at epoch 28: 0.156
+####################### Evaluating test set at epoch 28 #######################
+CER at epoch 28: 0.065
+WER at epoch 28: 0.215
+
+*** New best CER: 0.046 at epoch 28 ***
+
+orig:: are humans. You are only flymen. We will
+pred:: are humans. You are only flymen. We will
+####################### Saving model at epoch 29 #######################
+Model saved to: ./saved_models/experiments/run_73/model.pt
+####################### Evaluating val set at epoch 29 #######################
+CER at epoch 29: 0.048
+WER at epoch 29: 0.165
+####################### Evaluating test set at epoch 29 #######################
+CER at epoch 29: 0.067
+WER at epoch 29: 0.219
+orig:: footrope of a trawl does this. Films
+pred:: footrope of a trawl does this. Films
+####################### Saving model at epoch 30 #######################
+Model saved to: ./saved_models/experiments/run_73/model.pt
+####################### Evaluating val set at epoch 30 #######################
+CER at epoch 30: 0.047
+WER at epoch 30: 0.162
+####################### Evaluating test set at epoch 30 #######################
+CER at epoch 30: 0.064
+WER at epoch 30: 0.213
+orig:: one of the miners who'd come along with
+pred:: one of the miners who'd come along with
+####################### Saving model at epoch 31 #######################
+Model saved to: ./saved_models/experiments/run_73/model.pt
+####################### Evaluating val set at epoch 31 #######################
+CER at epoch 31: 0.045
+WER at epoch 31: 0.157
+####################### Evaluating test set at epoch 31 #######################
+CER at epoch 31: 0.061
+WER at epoch 31: 0.208
+
+*** New best CER: 0.045 at epoch 31 ***
+
+orig:: saying?" John was furious. The little squirt!
+pred:: saying?" Yohn was furious. The little spuist!
+####################### Saving model at epoch 32 #######################
+Model saved to: ./saved_models/experiments/run_73/model.pt
+####################### Evaluating val set at epoch 32 #######################
+CER at epoch 32: 0.044
+WER at epoch 32: 0.154
+####################### Evaluating test set at epoch 32 #######################
+CER at epoch 32: 0.061
+WER at epoch 32: 0.208
+
+*** New best CER: 0.044 at epoch 32 ***
+
+orig:: watched us as we ate the beans. Then when
+pred:: watched us as we ate the beans. Then when
+####################### Saving model at epoch 33 #######################
+Model saved to: ./saved_models/experiments/run_73/model.pt
+####################### Evaluating val set at epoch 33 #######################
+CER at epoch 33: 0.046
+WER at epoch 33: 0.161
+####################### Evaluating test set at epoch 33 #######################
+CER at epoch 33: 0.067
+WER at epoch 33: 0.219
+orig:: were married, Di. Like a patient wishes his operation
+pred:: were married, Dip like a paitent wihes his aperation
+####################### Saving model at epoch 34 #######################
+Model saved to: ./saved_models/experiments/run_73/model.pt
+####################### Evaluating val set at epoch 34 #######################
+CER at epoch 34: 0.045
+WER at epoch 34: 0.156
+####################### Evaluating test set at epoch 34 #######################
+CER at epoch 34: 0.062
+WER at epoch 34: 0.211
+orig:: have joined this train by taking
+pred:: have joined this train by tabing
+####################### Saving model at epoch 35 #######################
+Model saved to: ./saved_models/experiments/run_73/model.pt
+####################### Evaluating val set at epoch 35 #######################
+CER at epoch 35: 0.045
+WER at epoch 35: 0.158
+####################### Evaluating test set at epoch 35 #######################
+CER at epoch 35: 0.063
+WER at epoch 35: 0.212
+orig:: from the west.
+pred:: from the west.
+####################### Saving model at epoch 36 #######################
+Model saved to: ./saved_models/experiments/run_73/model.pt
+####################### Evaluating val set at epoch 36 #######################
+CER at epoch 36: 0.044
+WER at epoch 36: 0.152
+####################### Evaluating test set at epoch 36 #######################
+CER at epoch 36: 0.061
+WER at epoch 36: 0.206
+
+*** New best CER: 0.044 at epoch 36 ***
+
+orig:: Peron entered, a large man, who had once been
+pred:: Peron entered, a lorge man, who had once been
+####################### Saving model at epoch 37 #######################
+Model saved to: ./saved_models/experiments/run_73/model.pt
+####################### Evaluating val set at epoch 37 #######################
+CER at epoch 37: 0.044
+WER at epoch 37: 0.154
+####################### Evaluating test set at epoch 37 #######################
+CER at epoch 37: 0.064
+WER at epoch 37: 0.212
+orig:: "But I'm only going fifteen miles away,"
+pred:: "But I'm onty going tiftien wilas away,"
+####################### Saving model at epoch 38 #######################
+Model saved to: ./saved_models/experiments/run_73/model.pt
+####################### Evaluating val set at epoch 38 #######################
+CER at epoch 38: 0.043
+WER at epoch 38: 0.150
+####################### Evaluating test set at epoch 38 #######################
+CER at epoch 38: 0.061
+WER at epoch 38: 0.208
+
+*** New best CER: 0.043 at epoch 38 ***
+
+orig:: Derby hat fussed around the stove. "2Ain't
+pred:: Derby hat fussed arrund the store. "2Ain't
+####################### Saving model at epoch 39 #######################
+Model saved to: ./saved_models/experiments/run_73/model.pt
+####################### Evaluating val set at epoch 39 #######################
+CER at epoch 39: 0.043
+WER at epoch 39: 0.149
+####################### Evaluating test set at epoch 39 #######################
+CER at epoch 39: 0.061
+WER at epoch 39: 0.204
+
+*** New best CER: 0.043 at epoch 39 ***
+
+orig:: water to make him swim when he is born.
+pred:: water to make him saim when he is Jom.
+####################### Saving model at epoch 40 #######################
+Model saved to: ./saved_models/experiments/run_73/model.pt
+####################### Evaluating val set at epoch 40 #######################
+CER at epoch 40: 0.044
+WER at epoch 40: 0.153
+####################### Evaluating test set at epoch 40 #######################
+CER at epoch 40: 0.062
+WER at epoch 40: 0.204
+orig:: "That your days may be multiplied and the
+pred:: "That your days many be wultiplied and the
+####################### Saving model at epoch 41 #######################
+Model saved to: ./saved_models/experiments/run_73/model.pt
+####################### Evaluating val set at epoch 41 #######################
+CER at epoch 41: 0.039
+WER at epoch 41: 0.136
+####################### Evaluating test set at epoch 41 #######################
+CER at epoch 41: 0.055
+WER at epoch 41: 0.186
+
+*** New best CER: 0.039 at epoch 41 ***
+
+orig:: revised even before the upheaval. The ingenuity
+pred:: revised even before the uphearal. The ingeunity
+####################### Saving model at epoch 42 #######################
+Model saved to: ./saved_models/experiments/run_73/model.pt
+####################### Evaluating val set at epoch 42 #######################
+CER at epoch 42: 0.038
+WER at epoch 42: 0.133
+####################### Evaluating test set at epoch 42 #######################
+CER at epoch 42: 0.054
+WER at epoch 42: 0.182
+
+*** New best CER: 0.038 at epoch 42 ***
+
+orig:: them.
+pred:: theu.
+####################### Saving model at epoch 43 #######################
+Model saved to: ./saved_models/experiments/run_73/model.pt
+####################### Evaluating val set at epoch 43 #######################
+CER at epoch 43: 0.038
+WER at epoch 43: 0.132
+####################### Evaluating test set at epoch 43 #######################
+CER at epoch 43: 0.054
+WER at epoch 43: 0.184
+orig:: new seat outside the hospital
+pred:: non seat ontaide the hospital
+####################### Saving model at epoch 44 #######################
+Model saved to: ./saved_models/experiments/run_73/model.pt
+####################### Evaluating val set at epoch 44 #######################
+CER at epoch 44: 0.037
+WER at epoch 44: 0.131
+####################### Evaluating test set at epoch 44 #######################
+CER at epoch 44: 0.053
+WER at epoch 44: 0.181
+
+*** New best CER: 0.037 at epoch 44 ***
+
+orig:: She avoided his gaze, and tried to ignore that
+pred:: She avoided his gaze, and tried to ignone that
+####################### Saving model at epoch 45 #######################
+Model saved to: ./saved_models/experiments/run_73/model.pt
+####################### Evaluating val set at epoch 45 #######################
+CER at epoch 45: 0.037
+WER at epoch 45: 0.130
+####################### Evaluating test set at epoch 45 #######################
+CER at epoch 45: 0.053
+WER at epoch 45: 0.181
+
+*** New best CER: 0.037 at epoch 45 ***
+
+orig:: of the theories is impressive and is the best
+pred:: of the theories is impressive and is the best
+####################### Saving model at epoch 46 #######################
+Model saved to: ./saved_models/experiments/run_73/model.pt
+####################### Evaluating val set at epoch 46 #######################
+CER at epoch 46: 0.037
+WER at epoch 46: 0.129
+####################### Evaluating test set at epoch 46 #######################
+CER at epoch 46: 0.052
+WER at epoch 46: 0.180
+
+*** New best CER: 0.037 at epoch 46 ***
+
+orig:: the knowledge that he had gone shopping in the town of Guil-
+pred:: the knowledge that he had gone shopping in the town of Cuil-
+####################### Saving model at epoch 47 #######################
+Model saved to: ./saved_models/experiments/run_73/model.pt
+####################### Evaluating val set at epoch 47 #######################
+CER at epoch 47: 0.036
+WER at epoch 47: 0.128
+####################### Evaluating test set at epoch 47 #######################
+CER at epoch 47: 0.052
+WER at epoch 47: 0.178
+
+*** New best CER: 0.036 at epoch 47 ***
+
+orig:: to have been away for four days. Not in itself a crime, but, added to
+pred:: to have been away for four days. Not in itself a crime, but, added to
+####################### Saving model at epoch 48 #######################
+Model saved to: ./saved_models/experiments/run_73/model.pt
+####################### Evaluating val set at epoch 48 #######################
+CER at epoch 48: 0.036
+WER at epoch 48: 0.126
+####################### Evaluating test set at epoch 48 #######################
+CER at epoch 48: 0.052
+WER at epoch 48: 0.179
+orig:: prepared for something unpleasant, for this was
+pred:: prepared for something unpleasant, For this was
+####################### Saving model at epoch 49 #######################
+Model saved to: ./saved_models/experiments/run_73/model.pt
+####################### Evaluating val set at epoch 49 #######################
+CER at epoch 49: 0.036
+WER at epoch 49: 0.127
+####################### Evaluating test set at epoch 49 #######################
+CER at epoch 49: 0.052
+WER at epoch 49: 0.178
+
+*** New best CER: 0.036 at epoch 49 ***
+
+orig:: John eyed him steadily. "It's the Parcifal
+pred:: John eyed him steadily. "It's the Porncifal
+####################### Saving model at epoch 50 #######################
+Model saved to: ./saved_models/experiments/run_73/model.pt
+####################### Evaluating val set at epoch 50 #######################
+CER at epoch 50: 0.037
+WER at epoch 50: 0.129
+####################### Evaluating test set at epoch 50 #######################
+CER at epoch 50: 0.052
+WER at epoch 50: 0.179
+orig:: at slack waters, even in daylight
+pred:: at slack waters, even in daylight
+####################### Saving model at epoch 51 #######################
+Model saved to: ./saved_models/experiments/run_73/model.pt
+####################### Evaluating val set at epoch 51 #######################
+CER at epoch 51: 0.036
+WER at epoch 51: 0.127
+####################### Evaluating test set at epoch 51 #######################
+CER at epoch 51: 0.052
+WER at epoch 51: 0.177
+orig:: to sort things out in her mind. That beneath his
+pred:: to sort things out in her mind. That beneath his
+####################### Saving model at epoch 52 #######################
+Model saved to: ./saved_models/experiments/run_73/model.pt
+####################### Evaluating val set at epoch 52 #######################
+CER at epoch 52: 0.036
+WER at epoch 52: 0.125
+####################### Evaluating test set at epoch 52 #######################
+CER at epoch 52: 0.051
+WER at epoch 52: 0.177
+
+*** New best CER: 0.036 at epoch 52 ***
+
+orig:: Rev. Edwards.
+pred:: Ror. Edwards.
+####################### Saving model at epoch 53 #######################
+Model saved to: ./saved_models/experiments/run_73/model.pt
+####################### Evaluating val set at epoch 53 #######################
+CER at epoch 53: 0.036
+WER at epoch 53: 0.124
+####################### Evaluating test set at epoch 53 #######################
+CER at epoch 53: 0.051
+WER at epoch 53: 0.176
+orig:: as a very precious diamond-stone and very adamant.
+pred:: as a veng preciow diamend-stone and very adamet
+####################### Saving model at epoch 54 #######################
+Model saved to: ./saved_models/experiments/run_73/model.pt
+####################### Evaluating val set at epoch 54 #######################
+CER at epoch 54: 0.036
+WER at epoch 54: 0.127
+####################### Evaluating test set at epoch 54 #######################
+CER at epoch 54: 0.051
+WER at epoch 54: 0.178
+orig:: looked across at Nick Dowd - "someone cut
+pred:: looked across at Nick Dowd-"someone cut
+####################### Saving model at epoch 55 #######################
+Model saved to: ./saved_models/experiments/run_73/model.pt
+####################### Evaluating val set at epoch 55 #######################
+CER at epoch 55: 0.035
+WER at epoch 55: 0.126
+####################### Evaluating test set at epoch 55 #######################
+CER at epoch 55: 0.051
+WER at epoch 55: 0.176
+
+*** New best CER: 0.035 at epoch 55 ***
+
+orig:: when there came a sudden gust of wind
+pred:: when there came a sudden gust of wind
+####################### Saving model at epoch 56 #######################
+Model saved to: ./saved_models/experiments/run_73/model.pt
+####################### Evaluating val set at epoch 56 #######################
+CER at epoch 56: 0.036
+WER at epoch 56: 0.126
+####################### Evaluating test set at epoch 56 #######################
+CER at epoch 56: 0.052
+WER at epoch 56: 0.177
+orig:: "If I were a tramp I would simply blow a
+pred:: If I were a tramp I would simply blow a
+####################### Saving model at epoch 57 #######################
+Model saved to: ./saved_models/experiments/run_73/model.pt
+####################### Evaluating val set at epoch 57 #######################
+CER at epoch 57: 0.035
+WER at epoch 57: 0.123
+####################### Evaluating test set at epoch 57 #######################
+CER at epoch 57: 0.051
+WER at epoch 57: 0.174
+orig:: essential article in their festal preparations;
+pred:: essential article in their festal preparations;
+####################### Saving model at epoch 58 #######################
+Model saved to: ./saved_models/experiments/run_73/model.pt
+####################### Evaluating val set at epoch 58 #######################
+CER at epoch 58: 0.036
+WER at epoch 58: 0.125
+####################### Evaluating test set at epoch 58 #######################
+CER at epoch 58: 0.051
+WER at epoch 58: 0.176
+orig:: work on Sundays," he said. "They're worse off than
+pred:: work on Sundaps," he said. "Theyp're werse off than
+####################### Saving model at epoch 59 #######################
+Model saved to: ./saved_models/experiments/run_73/model.pt
+####################### Evaluating val set at epoch 59 #######################
+CER at epoch 59: 0.036
+WER at epoch 59: 0.124
+####################### Evaluating test set at epoch 59 #######################
+CER at epoch 59: 0.051
+WER at epoch 59: 0.173
+orig:: Underwater films suggest that the
+pred:: Underwater films suggest that the
+####################### Saving model at epoch 60 #######################
+Model saved to: ./saved_models/experiments/run_73/model.pt
+####################### Evaluating val set at epoch 60 #######################
+CER at epoch 60: 0.035
+WER at epoch 60: 0.124
+####################### Evaluating test set at epoch 60 #######################
+CER at epoch 60: 0.051
+WER at epoch 60: 0.175
+
+*** New best CER: 0.035 at epoch 60 ***
+
+orig:: who is tough enough to change him."
+pred:: who is tough enough to change him."
+####################### Saving model at epoch 61 #######################
+Model saved to: ./saved_models/experiments/run_73/model.pt
+####################### Evaluating val set at epoch 61 #######################
+CER at epoch 61: 0.036
+WER at epoch 61: 0.124
+####################### Evaluating test set at epoch 61 #######################
+CER at epoch 61: 0.051
+WER at epoch 61: 0.175
+orig:: his position by lighting bonfires or hoisting a
+pred:: his position by lighting bonfives or hoisting a
+####################### Saving model at epoch 62 #######################
+Model saved to: ./saved_models/experiments/run_73/model.pt
+####################### Evaluating val set at epoch 62 #######################
+CER at epoch 62: 0.035
+WER at epoch 62: 0.123
+####################### Evaluating test set at epoch 62 #######################
+CER at epoch 62: 0.051
+WER at epoch 62: 0.175
+
+*** New best CER: 0.035 at epoch 62 ***
+
+orig:: one eyebrow. "Actually she was brunette
+pred:: one eyebrow. "Actually she was brunette
+####################### Saving model at epoch 63 #######################
+Model saved to: ./saved_models/experiments/run_73/model.pt
+####################### Evaluating val set at epoch 63 #######################
+CER at epoch 63: 0.035
+WER at epoch 63: 0.123
+####################### Evaluating test set at epoch 63 #######################
+CER at epoch 63: 0.051
+WER at epoch 63: 0.175
+orig:: was able to identify a photograph of the
+pred:: was able to identify a phatergraph of the
+####################### Saving model at epoch 64 #######################
+Model saved to: ./saved_models/experiments/run_73/model.pt
+####################### Evaluating val set at epoch 64 #######################
+CER at epoch 64: 0.035
+WER at epoch 64: 0.123
+####################### Evaluating test set at epoch 64 #######################
+CER at epoch 64: 0.051
+WER at epoch 64: 0.174
+
+*** New best CER: 0.035 at epoch 64 ***
+
+orig:: you may as well stay a while.
+pred:: you may as well stay a while.
+####################### Saving model at epoch 65 #######################
+Model saved to: ./saved_models/experiments/run_73/model.pt
+####################### Evaluating val set at epoch 65 #######################
+CER at epoch 65: 0.035
+WER at epoch 65: 0.124
+####################### Evaluating test set at epoch 65 #######################
+CER at epoch 65: 0.051
+WER at epoch 65: 0.175
+orig:: demptions are asked at the Seder-evening about these "four
+pred:: devaptions are asked at the Seder-evening about these "f our
+####################### Saving model at epoch 66 #######################
+Model saved to: ./saved_models/experiments/run_73/model.pt
+####################### Evaluating val set at epoch 66 #######################
+CER at epoch 66: 0.035
+WER at epoch 66: 0.124
+####################### Evaluating test set at epoch 66 #######################
+CER at epoch 66: 0.051
+WER at epoch 66: 0.174
+orig:: "Didn't they teach you at Cranwell that buses are
+pred:: "Didn't they teach you at Cronwell that busses are
+####################### Saving model at epoch 67 #######################
+Model saved to: ./saved_models/experiments/run_73/model.pt
+####################### Evaluating val set at epoch 67 #######################
+CER at epoch 67: 0.035
+WER at epoch 67: 0.123
+####################### Evaluating test set at epoch 67 #######################
+CER at epoch 67: 0.051
+WER at epoch 67: 0.174
+orig:: alone. Of course one couldn't say for certain when a
+pred:: alone. Of course one couldn't say for certain when a
+####################### Saving model at epoch 68 #######################
+Model saved to: ./saved_models/experiments/run_73/model.pt
+####################### Evaluating val set at epoch 68 #######################
+CER at epoch 68: 0.035
+WER at epoch 68: 0.123
+####################### Evaluating test set at epoch 68 #######################
+CER at epoch 68: 0.050
+WER at epoch 68: 0.173
+orig:: The Bow-wave Theory. This assumes
+pred:: The Bow-wave Theory. This assumes
+####################### Saving model at epoch 69 #######################
+Model saved to: ./saved_models/experiments/run_73/model.pt
+####################### Evaluating val set at epoch 69 #######################
+CER at epoch 69: 0.035
+WER at epoch 69: 0.123
+####################### Evaluating test set at epoch 69 #######################
+CER at epoch 69: 0.050
+WER at epoch 69: 0.173
+
+*** New best CER: 0.035 at epoch 69 ***
+
+orig:: in the preparation of stimulants for the
+pred:: in the preporation of stimulants for the
+####################### Saving model at epoch 70 #######################
+Model saved to: ./saved_models/experiments/run_73/model.pt
+####################### Evaluating val set at epoch 70 #######################
+CER at epoch 70: 0.035
+WER at epoch 70: 0.124
+####################### Evaluating test set at epoch 70 #######################
+CER at epoch 70: 0.051
+WER at epoch 70: 0.174
+orig:: walking arm in arm."
+pred:: walking arm in arm."
+####################### Saving model at epoch 71 #######################
+Model saved to: ./saved_models/experiments/run_73/model.pt
+####################### Evaluating val set at epoch 71 #######################
+CER at epoch 71: 0.035
+WER at epoch 71: 0.122
+####################### Evaluating test set at epoch 71 #######################
+CER at epoch 71: 0.050
+WER at epoch 71: 0.173
+orig:: earth-bound creatures? Aeroplanes fly, Broughtons.
+pred:: earth-bound createres!. Heroplanes fly, Broughtons
+####################### Saving model at epoch 72 #######################
+Model saved to: ./saved_models/experiments/run_73/model.pt
+####################### Evaluating val set at epoch 72 #######################
+CER at epoch 72: 0.035
+WER at epoch 72: 0.123
+####################### Evaluating test set at epoch 72 #######################
+CER at epoch 72: 0.050
+WER at epoch 72: 0.174
+orig:: Most of those who expound a theory of textual
+pred:: Most of those who expound a theory of tetual
+####################### Saving model at epoch 73 #######################
+Model saved to: ./saved_models/experiments/run_73/model.pt
+####################### Evaluating val set at epoch 73 #######################
+CER at epoch 73: 0.035
+WER at epoch 73: 0.123
+####################### Evaluating test set at epoch 73 #######################
+CER at epoch 73: 0.050
+WER at epoch 73: 0.173
+orig:: To go gassing to a newspaper man!
+pred:: To go gassing to a newspaper man!
+####################### Saving model at epoch 74 #######################
+Model saved to: ./saved_models/experiments/run_73/model.pt
+####################### Evaluating val set at epoch 74 #######################
+CER at epoch 74: 0.035
+WER at epoch 74: 0.123
+####################### Evaluating test set at epoch 74 #######################
+CER at epoch 74: 0.051
+WER at epoch 74: 0.174
+orig:: Dr. John Leake, who lived at Blackheath, and was
+pred:: Dr John Leake, who lived at Blackheath, and was
+####################### Saving model at epoch 75 #######################
+Model saved to: ./saved_models/experiments/run_73/model.pt
+####################### Evaluating val set at epoch 75 #######################
+CER at epoch 75: 0.035
+WER at epoch 75: 0.122
+####################### Evaluating test set at epoch 75 #######################
+CER at epoch 75: 0.051
+WER at epoch 75: 0.174
+orig:: staggered. Some of it is inevitable, and we do not want to
+pred:: staggered. Some of it is ine vitable, and we do no want to
+####################### Saving model at epoch 76 #######################
+Model saved to: ./saved_models/experiments/run_73/model.pt
+####################### Evaluating val set at epoch 76 #######################
+CER at epoch 76: 0.035
+WER at epoch 76: 0.123
+####################### Evaluating test set at epoch 76 #######################
+CER at epoch 76: 0.051
+WER at epoch 76: 0.174
+orig:: people by the short hairs, and was diverting them ...
+pred:: people by the sblort hairs, and was diverting them...
+####################### Saving model at epoch 77 #######################
+Model saved to: ./saved_models/experiments/run_73/model.pt
+####################### Evaluating val set at epoch 77 #######################
+CER at epoch 77: 0.035
+WER at epoch 77: 0.123
+####################### Evaluating test set at epoch 77 #######################
+CER at epoch 77: 0.051
+WER at epoch 77: 0.174
+orig:: Twenty Years," was anti-British.
+pred:: Iwenty 'Years" was ariti-Britiah.
+####################### Saving model at epoch 78 #######################
+Model saved to: ./saved_models/experiments/run_73/model.pt
+####################### Evaluating val set at epoch 78 #######################
+CER at epoch 78: 0.035
+WER at epoch 78: 0.124
+####################### Evaluating test set at epoch 78 #######################
+CER at epoch 78: 0.050
+WER at epoch 78: 0.173
+orig:: that one of us must volunteer. The Bishop, Dr. Burge, did
+pred:: that one of us must volunteer. The Bishop, Dr. Burge, did
+####################### Saving model at epoch 79 #######################
+Model saved to: ./saved_models/experiments/run_73/model.pt
+####################### Evaluating val set at epoch 79 #######################
+CER at epoch 79: 0.035
+WER at epoch 79: 0.123
+####################### Evaluating test set at epoch 79 #######################
+CER at epoch 79: 0.050
+WER at epoch 79: 0.173
+orig:: ebriety, or, as Bassius less clearly
+pred:: ebriety, or, as Bassius less cleasly
+####################### Saving model at epoch 80 #######################
+Model saved to: ./saved_models/experiments/run_73/model.pt
+####################### Evaluating val set at epoch 80 #######################
+CER at epoch 80: 0.035
+WER at epoch 80: 0.122
+####################### Evaluating test set at epoch 80 #######################
+CER at epoch 80: 0.050
+WER at epoch 80: 0.172
+
+================================================================================
+Training Completed!
+End Time: 2026-04-23 20:56:40
+Best Validation CER: 0.035 at epoch 69
+Final model saved to: ./saved_models/experiments/run_73/model.pt
+================================================================================
+Detailed evaluation saved to: ./saved_models/experiments/run_73/evaluation_details.csv
+
+================================================================================
+Experiment run_73 completed!
+Results saved in: ./saved_models/experiments/run_73
+Detailed evaluation CSV: ./saved_models/experiments/run_73/evaluation_details.csv
+================================================================================
+
+=========================================
+Completed at: Thu Apr 23 08:56:46 PM CEST 2026
+=========================================
+=== JOB_STATISTICS ===
+=== current date     : Thu Apr 23 08:56:47 PM CEST 2026
+= Job-ID             : 1582136 on tinygpu
+= Job-Name           : baseline_cnn_rnn
+= Job-Command        : /home/hpc/iwi5/iwi5369h/HTR-Pipeline/experiments_execution/slurm_scripts/01_baseline.slurm
+= Initial workdir    : /home/hpc/iwi5/iwi5369h/HTR-Pipeline/experiments_execution
+= Queue/Partition    : rtx3080
+= Slurm account      : iwi5 with QOS=normal
+= Requested resources:  for 04:00:00
+= Elapsed runtime    : 01:38:12
+= Total RAM usage    : 2.1 GiB of requested  GiB (%)   
+= Node list          : tg084
+= Subm/Elig/Start/End: 2026-04-23T11:59:37 / 2026-04-23T11:59:37 / 2026-04-23T19:18:34 / 2026-04-23T20:56:46
+======================
+=== Quota infos ======
+    Path                 Used     SoftQ    HardQ    Gracetime  Filec    FileQ    FiHaQ    FileGrace    
+    /home/hpc              78.4G   104.9G   209.7G        N/A     110K     500K   1,000K        N/A    
+    /home/woody            20.8G  1000.0G  1500.0G        N/A  46,816    5,000K   7,500K        N/A    
+======================
+=== GPU utilization ==
+gpu_name, gpu_bus_id, pid, gpu_utilization [%], mem_utilization [%], max_memory_usage [MiB], time [ms]
+NVIDIA GeForce RTX 3080, 00000000:3E:00.0, 1127627, 71 %, 29 %, 1242 MiB, 4747211 ms

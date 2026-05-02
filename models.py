@@ -75,28 +75,14 @@ def weight_init(m):
 
 
 class CTCtopC(nn.Module):
-    def __init__(self, input_size, nclasses, dropout=0.0):
+    def __init__(self, input_size, nclasses):
         super(CTCtopC, self).__init__()
 
-        # Add LayerNorm for better training stability
-        self.norm = nn.LayerNorm(input_size)
-        self.dropout = nn.Dropout(dropout)
-        self.cnn_top = nn.Conv2d(input_size, nclasses, kernel_size=(1, 3), stride=1, padding=(0, 1))
-        
-        # Initialize output layer with smaller weights for stable CTC training
-        nn.init.xavier_uniform_(self.cnn_top.weight, gain=0.1)
-        if self.cnn_top.bias is not None:
-            nn.init.zeros_(self.cnn_top.bias)
+        self.cnn_top = nn.Sequential(nn.Dropout(.5), 
+                                     nn.Conv2d(input_size, nclasses, kernel_size=(1, 3), stride=1, padding=(0, 1)))
 
     def forward(self, x):
         # x: [B, C, H, W] where H=1
-        # Apply LayerNorm on feature dimension
-        B, C, H, W = x.shape
-        x_norm = x.squeeze(2).permute(2, 0, 1)  # [W, B, C]
-        x_norm = self.norm(x_norm)  # LayerNorm on last dim
-        x = x_norm.permute(1, 2, 0).unsqueeze(2)  # Back to [B, C, 1, W]
-        
-        x = self.dropout(x)
         y = self.cnn_top(x)  # [B, nclasses, H, W]
         y = y.squeeze(2).permute(2, 0, 1)  # [T, B, nclasses]
         return y
@@ -104,7 +90,7 @@ class CTCtopC(nn.Module):
 
 class CTCtopLinear(nn.Module):
     """
-    Linear CTC head for Mamba or other sequence models.
+    Linear CTC head for sequence models.
     Takes [T, B, D] or [B, D, 1, T] and outputs [T, B, nclasses]
     """
     def __init__(self, input_size, nclasses, dropout=0.0):
@@ -125,13 +111,11 @@ class CTCtopLinear(nn.Module):
 
 
 class CTCtopR(nn.Module):
-    def __init__(self, input_size, rnn_cfg, nclasses, rnn_type='gru'):
+    def __init__(self, input_size, rnn_cfg, nclasses, rnn_type='gru', is_vit=False):
         super(CTCtopR, self).__init__()
 
         hidden, num_layers = rnn_cfg
-
-        # Add LayerNorm before RNN for better gradient flow
-        self.norm = nn.LayerNorm(input_size)
+        self.is_vit = is_vit
         
         if rnn_type == 'gru':
             self.rec = nn.GRU(input_size, hidden, num_layers=num_layers, bidirectional=True, dropout=.2)
@@ -141,21 +125,13 @@ class CTCtopR(nn.Module):
             print('problem! - no such rnn type is defined')
             exit()
         
-        # Add residual connection support
-        self.use_residual = (input_size == 2 * hidden)
-        if self.use_residual:
-            self.residual_proj = nn.Identity()
+        # LayerNorm for ViT features (stabilization), not needed for CNN
+        if is_vit:
+            self.layer_norm = nn.LayerNorm(2 * hidden)
         
-        self.fnl = nn.Sequential(
-            nn.LayerNorm(2 * hidden),
-            nn.Dropout(.3), 
-            nn.Linear(2 * hidden, nclasses)
-        )
-        
-        # Better initialization for output layer
-        nn.init.xavier_uniform_(self.fnl[2].weight, gain=0.1)
-        if self.fnl[2].bias is not None:
-            nn.init.zeros_(self.fnl[2].bias)
+        # Reduced dropout for ViT (0.1), standard for CNN (0.5)
+        dropout_rate = 0.1 if is_vit else 0.5
+        self.fnl = nn.Sequential(nn.Dropout(dropout_rate), nn.Linear(2 * hidden, nclasses))
 
     def forward(self, x):
         # x: [B, C, H, W] where H should be 1 for sequence data
@@ -164,20 +140,23 @@ class CTCtopR(nn.Module):
         # Remove singleton spatial dimension and transpose
         # [B, C, 1, W] -> [B, C, W] -> [W, B, C]
         y = x.squeeze(2).permute(2, 0, 1)  # [T, B, C]
-        
-        # Apply LayerNorm
-        y = self.norm(y)  # [T, B, C]
-        
         y = self.rec(y)[0]  # [T, B, 2*hidden]
+        
+        # Apply LayerNorm only for ViT features (not CNN)
+        if self.is_vit:
+            y = self.layer_norm(y)
+        
         y = self.fnl(y)     # [T, B, nclasses]
 
         return y
 
 class CTCtopB(nn.Module):
-    def __init__(self, input_size, rnn_cfg, nclasses, rnn_type='gru'):
+    def __init__(self, input_size, rnn_cfg, nclasses, rnn_type='gru', is_vit=False, return_both=True):
         super(CTCtopB, self).__init__()
 
         hidden, num_layers = rnn_cfg
+        self.is_vit = is_vit
+        self.return_both = return_both  # Whether to return both RNN and CNN outputs
 
         if rnn_type == 'gru':
             self.rec = nn.GRU(input_size, hidden, num_layers=num_layers, bidirectional=True, dropout=.2)
@@ -187,25 +166,46 @@ class CTCtopB(nn.Module):
             print('problem! - no such rnn type is defined')
             exit()
         
-        self.fnl = nn.Sequential(nn.Dropout(.5), nn.Linear(2 * hidden, nclasses))
+        # LayerNorm for ViT features (stabilization), not needed for CNN
+        if is_vit:
+            self.layer_norm = nn.LayerNorm(2 * hidden)
+        
+        # Reduced dropout for ViT (0.1), standard for CNN (0.5)
+        dropout_rate = 0.1 if is_vit else 0.5
+        self.fnl = nn.Sequential(nn.Dropout(dropout_rate), nn.Linear(2 * hidden, nclasses))
 
-        self.cnn = nn.Sequential(nn.Dropout(.5), 
-                                 nn.Conv2d(input_size, nclasses, kernel_size=(1, 3), stride=1, padding=(0, 1))
-        )
+        # Only create CNN shortcut if needed (when return_both=True)
+        if self.return_both:
+            self.cnn = nn.Sequential(nn.Dropout(dropout_rate), 
+                                     nn.Conv2d(input_size, nclasses, kernel_size=(1, 3), stride=1, padding=(0, 1))
+            )
 
     def forward(self, x):
         # RNN path: [B, C, H, W] -> [T, B, C] -> [T, B, nclasses]
         y = x.squeeze(2).permute(2, 0, 1)  # [T, B, C]
         y = self.rec(y)[0]  # [T, B, 2*hidden]
+        
+        # Apply LayerNorm only for ViT features (not CNN)
+        if self.is_vit:
+            y = self.layer_norm(y)
+        
         y = self.fnl(y)     # [T, B, nclasses]
 
-        # CNN shortcut path: [B, C, H, W] -> [T, B, nclasses]
-        cnn_out = self.cnn(x).squeeze(2).permute(2, 0, 1)  # [T, B, nclasses]
-
-        if self.training:
-            return y, cnn_out
+        # If return_both=True, compute CNN shortcut and return both
+        # Otherwise, just return RNN output
+        if self.return_both:
+            # CNN shortcut path: [B, C, H, W] -> [T, B, nclasses]
+            cnn_out = self.cnn(x).squeeze(2).permute(2, 0, 1)  # [T, B, nclasses]
+            
+            # Return both outputs during training for dual supervision
+            # During eval, return only RNN output (primary path)
+            if self.training:
+                return y, cnn_out
+            else:
+                return y
         else:
-            return y, cnn_out
+            # Only RNN output (no CNN shortcut)
+            return y
 
 
 class ViTRGTSBackbone(nn.Module):
@@ -234,6 +234,7 @@ class ViTRGTSBackbone(nn.Module):
         dropout: float = 0.1,
         emb_dropout: float = 0.1,
         max_seq_len: int = 1024,
+        use_cnn_stem: bool = False,
     ):
         super().__init__()
 
@@ -248,15 +249,46 @@ class ViTRGTSBackbone(nn.Module):
         self.embed_dim = embed_dim
         self.num_registers = num_registers
         self.max_seq_len = max_seq_len
+        self.use_cnn_stem = use_cnn_stem
 
-        # Patch embedding: from [B, 1, H, W] -> [B, D, Hp, Wp]
-        self.patch_embed = nn.Conv2d(
-            in_channels=1,
-            out_channels=embed_dim,
-            kernel_size=(self.patch_height, self.patch_width),
-            stride=(self.patch_height, self.patch_width),
-            padding=0,
-        )
+        if use_cnn_stem:
+            # -------------------------------------------------------------------
+            # CNN Stem: local feature extraction + height collapse.
+            # Produces a 1-D left-to-right token sequence ideal for CTC.
+            #
+            # For 128×1024 input:
+            #   Conv1 (stride 4,2): → [B, 32, 32, 512]
+            #   Conv2 (stride 2,2): → [B, 64, 16, 256]
+            #   Conv3 (stride 2,2): → [B,128,  8, 128]
+            #   Conv4 (stride 2,1): → [B,  D,  4, 128]
+            #   AvgPool (H→1):     → [B,  D,  1, 128]  = 128 column-tokens
+            #
+            # Each token spans ~8 px horizontally ≈ 3 tokens per character.
+            # -------------------------------------------------------------------
+            self.cnn_stem = nn.Sequential(
+                nn.Conv2d(1, 32, kernel_size=7, stride=(4, 2), padding=3),
+                nn.BatchNorm2d(32),
+                nn.GELU(),
+                nn.Conv2d(32, 64, kernel_size=3, stride=(2, 2), padding=1),
+                nn.BatchNorm2d(64),
+                nn.GELU(),
+                nn.Conv2d(64, 128, kernel_size=3, stride=(2, 2), padding=1),
+                nn.BatchNorm2d(128),
+                nn.GELU(),
+                nn.Conv2d(128, embed_dim, kernel_size=3, stride=(2, 1), padding=1),
+                nn.BatchNorm2d(embed_dim),
+                nn.GELU(),
+            )
+            self.stem_pool = nn.AdaptiveMaxPool2d((1, None))
+        else:
+            # Original patch embedding: from [B, 1, H, W] -> [B, D, Hp, Wp]
+            self.patch_embed = nn.Conv2d(
+                in_channels=1,
+                out_channels=embed_dim,
+                kernel_size=(self.patch_height, self.patch_width),
+                stride=(self.patch_height, self.patch_width),
+                padding=0,
+            )
 
         # Register tokens (learned, store global info)
         self.register_tokens = nn.Parameter(
@@ -301,12 +333,17 @@ class ViTRGTSBackbone(nn.Module):
         B, C, H, W = x.shape
         assert C == 1, f"Expected grayscale input (C=1), got C={C}"
 
-        # Patchify
-        x = self.patch_embed(x)               # [B, D, Hp, Wp]
-        B, D, Hp, Wp = x.shape
-        num_patches = Hp * Wp
-
-        patch_tokens = x.flatten(2).transpose(1, 2)  # [B, Np, D]
+        if self.use_cnn_stem:
+            # CNN stem: local features → height collapse → 1-D sequence
+            x = self.cnn_stem(x)              # [B, D, H', W']
+            x = self.stem_pool(x)             # [B, D, 1, W']
+            B, D, Hp, Wp = x.shape            # Hp=1, Wp≈W/8
+            patch_tokens = x.squeeze(2).transpose(1, 2)  # [B, Wp, D]
+        else:
+            # Original patchify (2-D grid)
+            x = self.patch_embed(x)               # [B, D, Hp, Wp]
+            B, D, Hp, Wp = x.shape
+            patch_tokens = x.flatten(2).transpose(1, 2)  # [B, Np, D]
 
 
         # Prepare register tokens
@@ -355,11 +392,18 @@ class ViTRGTSBackbone(nn.Module):
         """
         B, C, H, W = x.shape
 
-        # === PATCH EMBEDDING ===================================================
-        x = self.patch_embed(x)               # [B, D, Hp, Wp]
-        B, D, Hp, Wp = x.shape
-        patch_tokens = x.flatten(2).transpose(1, 2)  # [B, Np, D]
-        num_patches = Hp * Wp
+        # === PATCH EMBEDDING / CNN STEM ========================================
+        if self.use_cnn_stem:
+            x = self.cnn_stem(x)
+            x = self.stem_pool(x)
+            B, D, Hp, Wp = x.shape
+            patch_tokens = x.squeeze(2).transpose(1, 2)
+            num_patches = Wp
+        else:
+            x = self.patch_embed(x)               # [B, D, Hp, Wp]
+            B, D, Hp, Wp = x.shape
+            patch_tokens = x.flatten(2).transpose(1, 2)  # [B, Np, D]
+            num_patches = Hp * Wp
 
         reg_tokens = self.register_tokens.expand(B, -1, -1)  # [B, R, D]
 
@@ -391,17 +435,22 @@ class ViTRGTSBackbone(nn.Module):
             num_heads = attn_module.num_heads
             head_dim = embed_dim // num_heads
             
+            # === SELF-ATTENTION BLOCK (norm_first=True) ========================
+            # Correct pre-norm pattern: x = x + attn(norm1(x))
+            # We norm a COPY, compute attention from it, then add to the ORIGINAL.
+            normed = layer.norm1(x_tokens)
+            
             # Apply input projection (in_proj contains Q, K, V weights)
             if attn_module._qkv_same_embed_dim:
                 # Single weight matrix for Q, K, V
                 q, k, v = torch.nn.functional.linear(
-                    x_tokens, attn_module.in_proj_weight, attn_module.in_proj_bias
+                    normed, attn_module.in_proj_weight, attn_module.in_proj_bias
                 ).chunk(3, dim=-1)
             else:
                 # Separate Q, K, V projections
-                q = torch.nn.functional.linear(x_tokens, attn_module.q_proj_weight, attn_module.in_proj_bias[:embed_dim])
-                k = torch.nn.functional.linear(x_tokens, attn_module.k_proj_weight, attn_module.in_proj_bias[embed_dim:2*embed_dim])
-                v = torch.nn.functional.linear(x_tokens, attn_module.v_proj_weight, attn_module.in_proj_bias[2*embed_dim:])
+                q = torch.nn.functional.linear(normed, attn_module.q_proj_weight, attn_module.in_proj_bias[:embed_dim])
+                k = torch.nn.functional.linear(normed, attn_module.k_proj_weight, attn_module.in_proj_bias[embed_dim:2*embed_dim])
+                v = torch.nn.functional.linear(normed, attn_module.v_proj_weight, attn_module.in_proj_bias[2*embed_dim:])
             
             B_, S_, E_ = q.shape
             
@@ -425,13 +474,13 @@ class ViTRGTSBackbone(nn.Module):
                 attn_output, attn_module.out_proj.weight, attn_module.out_proj.bias
             )
             
-            # Apply residual connection and layer norm (norm-first)
-            x_tokens = layer.norm1(x_tokens)
+            # Residual connection: add attention output to UN-NORMED input
             x_tokens = x_tokens + attn_output
             
-            # Feed-forward network
-            x_tokens = layer.norm2(x_tokens)
-            ff_output = layer.linear2(layer.dropout(layer.activation(layer.linear1(x_tokens))))
+            # === FEED-FORWARD BLOCK (norm_first=True) ==========================
+            # Correct pre-norm pattern: x = x + ffn(norm2(x))
+            normed = layer.norm2(x_tokens)
+            ff_output = layer.linear2(layer.dropout(layer.activation(layer.linear1(normed))))
             x_tokens = x_tokens + ff_output
 
 
@@ -485,6 +534,7 @@ class TorchVisionViTBackbone(nn.Module):
         import os
         cache_dir = os.path.abspath(os.path.join(
             os.path.dirname(__file__), 
+            'asset',
             'pretrained_models', 
             'torchvision'
         ))
@@ -516,6 +566,7 @@ class TorchVisionViTBackbone(nn.Module):
         self.embed_dim = self.vit.hidden_dim
         self.patch_size = self.vit.patch_size
         self.num_registers = num_registers
+        self.pretrained = pretrained
         self.image_height = image_height
         self.image_width = image_width
         
@@ -561,6 +612,15 @@ class TorchVisionViTBackbone(nn.Module):
                 x_rgb, size=(self.image_height, self.image_width),
                 mode='bilinear', align_corners=False
             )
+        
+        # Apply ImageNet normalization for pretrained models
+        # Pretrained ViT-B/16 expects inputs normalized with ImageNet mean/std.
+        # Without this, the pretrained weights receive out-of-distribution inputs
+        # and produce meaningless features (root cause of run_29 failure).
+        if self.pretrained:
+            mean = torch.tensor([0.485, 0.456, 0.406], device=x.device).view(1, 3, 1, 1)
+            std = torch.tensor([0.229, 0.224, 0.225], device=x.device).view(1, 3, 1, 1)
+            x_rgb = (x_rgb - mean) / std
         
         # Extract features from ViT encoder
         # Forward through patch embedding
@@ -661,6 +721,12 @@ class TorchVisionViTBackbone(nn.Module):
                 mode='bilinear', align_corners=False
             )
         
+        # Apply ImageNet normalization for pretrained models
+        if self.pretrained:
+            mean = torch.tensor([0.485, 0.456, 0.406], device=x.device).view(1, 3, 1, 1)
+            std = torch.tensor([0.229, 0.224, 0.225], device=x.device).view(1, 3, 1, 1)
+            x_rgb = (x_rgb - mean) / std
+        
         # Patch embedding
         x_patch = self.vit.conv_proj(x_rgb)
         B, D, Hp, Wp = x_patch.shape
@@ -711,16 +777,18 @@ class TorchVisionViTBackbone(nn.Module):
         attn_maps = []
         x_tokens = tokens
         
-        for layer in self.vit.encoder.layers.layers:
-            # Extract attention weights manually
+        for layer in self.vit.encoder.layers:
+            # Extract attention weights via self_attention with need_weights=True
+            # self_attention is nn.MultiheadAttention: requires (query, key, value)
+            normed = layer.ln_1(x_tokens)
             attn_output, attn_weights = layer.self_attention(
-                layer.ln_1(x_tokens), 
+                normed, normed, normed,
                 need_weights=True, 
                 average_attn_weights=False
             )
             attn_maps.append(attn_weights.cpu())
             
-            # Complete the transformer block
+            # Complete the transformer block (pre-norm residual pattern)
             x_tokens = x_tokens + attn_output
             x_tokens = x_tokens + layer.mlp(layer.ln_2(x_tokens))
         
@@ -784,21 +852,46 @@ class TrOCREncoderBackbone(nn.Module):
         print(f"Loading TrOCR model: {model_name}")
         print(f"Cache directory: {cache_dir}")
         
-        # HuggingFace transformers automatically caches, but we set explicit cache dir
-        self.model = VisionEncoderDecoderModel.from_pretrained(
-            model_name,
-            cache_dir=cache_dir
-        )
-        self.processor = TrOCRProcessor.from_pretrained(
-            model_name,
-            cache_dir=cache_dir
-        )
+        # Try to load from local cache first, fall back to download if needed
+        try:
+            # First try: Load from local cache only (no internet required)
+            print("Attempting to load from local cache (offline mode)...")
+            self.model = VisionEncoderDecoderModel.from_pretrained(
+                model_name,
+                cache_dir=cache_dir,
+                local_files_only=True
+            )
+            self.processor = TrOCRProcessor.from_pretrained(
+                model_name,
+                cache_dir=cache_dir,
+                local_files_only=True
+            )
+            print("✓ Successfully loaded from local cache")
+        except Exception as e:
+            # Fall back to downloading if local cache doesn't exist
+            print(f"Local cache not found: {e}")
+            print("Downloading from HuggingFace Hub...")
+            self.model = VisionEncoderDecoderModel.from_pretrained(
+                model_name,
+                cache_dir=cache_dir
+            )
+            self.processor = TrOCRProcessor.from_pretrained(
+                model_name,
+                cache_dir=cache_dir
+            )
+            print("✓ Successfully downloaded and cached")
         
         print(f"TrOCR model loaded successfully")
         
-        # Extract encoder only
+        # Extract encoder only and discard the full model (including decoder)
+        # to avoid storing ~247M unused decoder params as trainable submodules.
         self.encoder = self.model.encoder
         self.embed_dim = self.encoder.config.hidden_size
+        del self.model  # Free decoder parameters
+        
+        # Force eager attention so output_attentions=True works in forward_explain
+        # (SDPA/Flash attention do not support returning attention weights)
+        self.encoder.set_attn_implementation('eager')
         
         # Image preprocessing parameters
         self.image_height = image_height
@@ -813,6 +906,12 @@ class TrOCREncoderBackbone(nn.Module):
         self.patch_size = 16
         self.grid_h = image_height // self.patch_size
         self.grid_w = image_width // self.patch_size
+        
+        # For CTC: collapse 2D grid into 1D left-to-right sequence.
+        # Mean-pool over height rows, then repeat-interleave to get enough
+        # timesteps (CTC requires T >= max_label_length).
+        # grid_w=24 after pooling; 4× gives 96 timesteps (>= 76 max IAM label).
+        self.ctc_upsample = 4
         
         # Optionally freeze encoder
         if freeze_encoder:
@@ -832,12 +931,28 @@ class TrOCREncoderBackbone(nn.Module):
         # Convert to RGB
         x_rgb = self.gray_to_rgb(x)  # [B, 3, H, W]
         
-        # Resize to TrOCR's expected input size
-        if H != self.image_height or W != self.image_width:
-            x_rgb = F.interpolate(
-                x_rgb, size=(self.image_height, self.image_width),
-                mode='bilinear', align_corners=False
-            )
+        # Aspect-ratio-preserving resize + padding to target size.
+        # IAM line images are 128×1024 (1:8 ratio). Naive resize to 384×384
+        # squashes text 8× horizontally, making characters unreadable.
+        # Strategy: scale by longest dimension to fit target, pad shorter dimension.
+        # For 128×1024 → scale by width: new_h=48, new_w=384. Pad height to 384.
+        # This preserves character shapes and horizontal spacing.
+        target_h, target_w = self.image_height, self.image_width
+        scale = min(target_h / H, target_w / W)  # Fit longest side
+        new_h = int(H * scale)
+        new_w = int(W * scale)
+        
+        # Resize preserving aspect ratio
+        x_rgb = F.interpolate(
+            x_rgb, size=(new_h, new_w),
+            mode='bilinear', align_corners=False
+        )
+        
+        # Pad to target size (right-pad width, bottom-pad height with zeros)
+        pad_h = target_h - new_h
+        pad_w = target_w - new_w
+        if pad_h > 0 or pad_w > 0:
+            x_rgb = F.pad(x_rgb, (0, pad_w, 0, pad_h), mode='constant', value=0)
         
         # Normalize (TrOCR expects normalized inputs)
         mean = torch.tensor([0.5, 0.5, 0.5], device=x.device).view(1, 3, 1, 1)
@@ -852,10 +967,19 @@ class TrOCREncoderBackbone(nn.Module):
         # Shape: [B, 1 + Hp*Wp, D] -> [B, Hp*Wp, D]
         seq_tokens = hidden_states[:, 1:, :]  # Skip CLS token
         
+        # Collapse 2D grid to 1D left-to-right sequence for CTC:
+        # 1. Reshape to [B, Hp, Wp, D]
+        # 2. Mean-pool over height (Hp) -> [B, Wp, D]  (24 positions)
+        # 3. Repeat-interleave to get enough timesteps for CTC
+        D = seq_tokens.size(-1)
+        seq_tokens = seq_tokens.view(B, self.grid_h, self.grid_w, D)  # [B, Hp, Wp, D]
+        seq_tokens = seq_tokens.mean(dim=1)  # [B, Wp, D] - pool height
+        seq_tokens = seq_tokens.repeat_interleave(self.ctc_upsample, dim=1)  # [B, Wp*4, D]
+        
         # Convert to [T, B, D] for CTC
         seq_tokens = seq_tokens.transpose(0, 1)  # [T, B, D]
         
-        return seq_tokens, (self.grid_h, self.grid_w)
+        return seq_tokens, (1, self.grid_w)
     
     @torch.no_grad()
     def forward_explain(self, x):
@@ -866,17 +990,26 @@ class TrOCREncoderBackbone(nn.Module):
         
         # Preprocess
         x_rgb = self.gray_to_rgb(x)
-        if H != self.image_height or W != self.image_width:
-            x_rgb = F.interpolate(
-                x_rgb, size=(self.image_height, self.image_width),
-                mode='bilinear', align_corners=False
-            )
+        
+        # Aspect-ratio-preserving resize + padding (same as forward)
+        target_h, target_w = self.image_height, self.image_width
+        scale = min(target_h / H, target_w / W)
+        new_h = int(H * scale)
+        new_w = int(W * scale)
+        x_rgb = F.interpolate(
+            x_rgb, size=(new_h, new_w),
+            mode='bilinear', align_corners=False
+        )
+        pad_h = target_h - new_h
+        pad_w = target_w - new_w
+        if pad_h > 0 or pad_w > 0:
+            x_rgb = F.pad(x_rgb, (0, pad_w, 0, pad_h), mode='constant', value=0)
         
         mean = torch.tensor([0.5, 0.5, 0.5], device=x.device).view(1, 3, 1, 1)
         std = torch.tensor([0.5, 0.5, 0.5], device=x.device).view(1, 3, 1, 1)
         x_rgb = (x_rgb - mean) / std
         
-        # Forward with attention output
+        # Forward with attention output (eager attn set at __init__)
         encoder_outputs = self.encoder(
             pixel_values=x_rgb,
             output_attentions=True,
@@ -884,13 +1017,27 @@ class TrOCREncoderBackbone(nn.Module):
         )
         
         hidden_states = encoder_outputs.last_hidden_state
-        attn_maps = [attn.cpu() for attn in encoder_outputs.attentions]
+        attentions = encoder_outputs.attentions
+        if attentions is None:
+            # Fallback: if attention maps still not returned, create empty list
+            import warnings
+            warnings.warn("TrOCR encoder did not return attention maps. Check attn_implementation.")
+            attn_maps = []
+        else:
+            attn_maps = [attn.cpu() for attn in attentions]
         
         # Extract tokens
         cls_token = hidden_states[:, 0, :]  # [B, D]
-        seq_tokens = hidden_states[:, 1:, :].transpose(0, 1)  # [T, B, D]
+        seq_2d = hidden_states[:, 1:, :]     # [B, Hp*Wp, D]
         
-        # Token norms
+        # Height pool + repeat (same as forward)
+        D = seq_2d.size(-1)
+        seq_2d = seq_2d.view(B, self.grid_h, self.grid_w, D)
+        seq_pooled = seq_2d.mean(dim=1)  # [B, Wp, D]
+        seq_up = seq_pooled.repeat_interleave(self.ctc_upsample, dim=1)  # [B, Wp*4, D]
+        seq_tokens = seq_up.transpose(0, 1)  # [T, B, D]
+        
+        # Token norms (on the full 2D representation for visualization)
         token_norms = hidden_states.norm(dim=-1).cpu()  # [B, S]
         
         return seq_tokens, cls_token, attn_maps, token_norms, (self.grid_h, self.grid_w)
@@ -903,7 +1050,6 @@ class HTRNet(nn.Module):
       - ViT+Registers backbone (this work):        arch_cfg.type == 'vit_rgts'
       - TorchVision ViT backbone:                  arch_cfg.type == 'torchvision_vit'
       - TrOCR encoder backbone:                    arch_cfg.type == 'trocr'
-      - CNN+Mamba (state space model):             arch_cfg.type == 'cnn_mamba'
 
     Forward always returns:
         - logits: [T, B, nclasses]   (CTC-ready)
@@ -958,6 +1104,7 @@ class HTRNet(nn.Module):
                     (arch_cfg.rnn_hidden_size, arch_cfg.rnn_layers),
                     nclasses,
                     rnn_type=arch_cfg.rnn_type,
+                    return_both=True,  # Enable dual supervision
                 )
             else:
                 raise ValueError(f"Unknown head_type: {head}")
@@ -989,11 +1136,18 @@ class HTRNet(nn.Module):
             dropout = getattr(arch_cfg, "dropout", getattr(arch_cfg, "vit_dropout", 0.1))
             emb_dropout = getattr(arch_cfg, "emb_dropout", getattr(arch_cfg, "vit_emb_dropout", 0.1))
 
+            use_cnn_stem = getattr(arch_cfg, "use_cnn_stem", False)
+
             # Compute a safe max_seq_len if not specified:
-            #   R registers + Hp*Wp patches + small margin
-            Hp = image_height // patch_height
-            Wp = image_width  // patch_width
-            seq_len_est = num_registers + Hp * Wp + 8
+            if use_cnn_stem:
+                # CNN stem output: ~W/8 tokens in left-to-right order
+                Wp_est = image_width // 8
+                seq_len_est = num_registers + Wp_est + 16
+            else:
+                #   R registers + Hp*Wp patches + small margin
+                Hp = image_height // patch_height
+                Wp = image_width  // patch_width
+                seq_len_est = num_registers + Hp * Wp + 8
 
             max_seq_len = getattr(arch_cfg, "vit_max_seq_len", seq_len_est)
 
@@ -1009,6 +1163,7 @@ class HTRNet(nn.Module):
                 dropout=dropout,
                 emb_dropout=emb_dropout,
                 max_seq_len=max_seq_len,
+                use_cnn_stem=use_cnn_stem,
             )
 
             hidden = self.backbone.embed_dim
@@ -1026,6 +1181,8 @@ class HTRNet(nn.Module):
                     (arch_cfg.rnn_hidden_size, arch_cfg.rnn_layers),
                     nclasses,
                     rnn_type=arch_cfg.rnn_type,
+                    is_vit=True,  # Enable LayerNorm + reduced dropout for ViT
+                    return_both=True  # Enable dual supervision
                 )
             else:
                 # default: ViT -> BiRNN -> CTC
@@ -1034,6 +1191,7 @@ class HTRNet(nn.Module):
                     (arch_cfg.rnn_hidden_size, arch_cfg.rnn_layers),
                     nclasses,
                     rnn_type=arch_cfg.rnn_type,
+                    is_vit=True  # Enable LayerNorm + reduced dropout for ViT
                 )
         
         # ------------------------------------------------------------------
@@ -1067,6 +1225,8 @@ class HTRNet(nn.Module):
                     (arch_cfg.rnn_hidden_size, arch_cfg.rnn_layers),
                     nclasses,
                     rnn_type=arch_cfg.rnn_type,
+                    is_vit=True,  # Enable LayerNorm + reduced dropout for ViT
+                    return_both=True  # Enable dual supervision
                 )
             else:
                 self.top = CTCtopR(
@@ -1074,6 +1234,7 @@ class HTRNet(nn.Module):
                     (arch_cfg.rnn_hidden_size, arch_cfg.rnn_layers),
                     nclasses,
                     rnn_type=arch_cfg.rnn_type,
+                    is_vit=True  # Enable LayerNorm + reduced dropout for ViT
                 )
         
         # ------------------------------------------------------------------
@@ -1103,6 +1264,8 @@ class HTRNet(nn.Module):
                     (arch_cfg.rnn_hidden_size, arch_cfg.rnn_layers),
                     nclasses,
                     rnn_type=arch_cfg.rnn_type,
+                    is_vit=True,  # Enable LayerNorm + reduced dropout for ViT
+                    return_both=True  # Enable dual supervision
                 )
             else:
                 self.top = CTCtopR(
@@ -1110,6 +1273,7 @@ class HTRNet(nn.Module):
                     (arch_cfg.rnn_hidden_size, arch_cfg.rnn_layers),
                     nclasses,
                     rnn_type=arch_cfg.rnn_type,
+                    is_vit=True  # Enable LayerNorm + reduced dropout for ViT
                 )
         else:
             raise ValueError(f"Unknown architecture type: {self.arch_type}")
@@ -1161,25 +1325,6 @@ class HTRNet(nn.Module):
             seq_4d = seq_tokens.permute(1, 2, 0).unsqueeze(2)      # [B, D, 1, T]
             
             logits = self.top(seq_4d)                              # [T, B, nclasses]
-            return logits
-
-        elif self.arch_type == "cnn_mamba":
-            # CNN feature extraction
-            cnn_out = self.features(x)      # [B, C, H=1, W]
-            
-            # Reshape to sequence: [B, C, 1, W] -> [B, C, W] -> [W, B, C]
-            seq = cnn_out.squeeze(2).permute(2, 0, 1)  # [T, B, C]
-            
-            # Project to Mamba dimension if needed
-            if hasattr(self, 'cnn_to_mamba'):
-                # [T, B, C] -> [T, B, D]
-                seq = self.cnn_to_mamba(seq)
-            
-            # Mamba sequence modeling: [T, B, D] -> [T, B, D]
-            seq = self.mamba(seq)
-            
-            # CTC head: [T, B, D] -> [T, B, nclasses]
-            logits = self.top(seq)
             return logits
 
     @torch.no_grad()

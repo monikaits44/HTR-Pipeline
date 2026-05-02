@@ -14,7 +14,7 @@ preproc:
 # training
 train:
   lr: 1e-3
-  num_epochs: 30 # Earlier was 1 for quick testing, 800 for full training  
+  num_epochs: 80 # Earlier was 1 for quick testing, 800 for full training  
   batch_size: 8  # Reduced from 16 to handle memory constraints
   scheduler: 'mstep'  # right now only 'mstep' is supported, i.e. multistep
   save_every_k_epochs: 1 # Earlier was 50

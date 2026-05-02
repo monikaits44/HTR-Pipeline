@@ -439,11 +439,11 @@ class HTRTrainer(nn.Module):
         # ==================================================================
         elif arch_type == 'trocr':
             freeze_encoder = getattr(config.arch, 'freeze_encoder', True)
-            warmup_epochs = 3
+            warmup_epochs = 5
             
             if freeze_encoder:
                 # Only head params are trainable
-                head_lr = 5e-4
+                head_lr = 1e-4
                 head_wd = 0.0001
                 trainable_params = [p for p in self.net.parameters() if p.requires_grad]
                 optimizer = torch.optim.AdamW(trainable_params, lr=head_lr, weight_decay=head_wd)
@@ -639,13 +639,10 @@ class HTRTrainer(nn.Module):
             
             with torch.no_grad():
                 # Use forward_explain to get attention maps
+                # HTRNet.forward_explain returns: (logits, reg_tokens, attn_maps, token_norms, grid)
+                # For trocr, reg_tokens is None
                 try:
-                    if arch_type == 'vit_rgts':
-                        logits, reg_tokens, attn_maps, token_norms, grid = self.net.forward_explain(imgs)
-                    elif arch_type == 'torchvision_vit':
-                        logits, reg_tokens, attn_maps, token_norms, grid = self.net.forward_explain(imgs)
-                    elif arch_type == 'trocr':
-                        logits, _, attn_maps, token_norms, grid = self.net.forward_explain(imgs)
+                    logits, reg_tokens, attn_maps, token_norms, grid = self.net.forward_explain(imgs)
                 except Exception as e:
                     self.log(f'Warning: Could not extract attention: {str(e)}')
                     return

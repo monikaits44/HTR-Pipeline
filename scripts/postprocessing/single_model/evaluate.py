@@ -7,14 +7,14 @@ Produces per-sample predictions and error metrics.
 
 Supported Architectures: ALL (cnn_rnn, vit_rgts, torchvision_vit, trocr)
 Input: config YAML + model checkpoint (model.pt)
-Output: Terminal CER/WER summary, evaluation_summary JSON and evaluation_report TXT in run folder
+Output: Terminal CER/WER summary, evaluation_summary JSON and evaluation_report TXT in run_folder/evaluation/
 
 what it does:
     - Loads model checkpoint and config
     - Prepares dataloaders for val/test sets
     - Runs inference on each sample
     - Computes CER/WER per sample and overall
-    - Saves summary JSON and human-readable report to the run folder
+    - Saves summary JSON and human-readable report to the run_folder/evaluation/ subfolder
 
 Usage:
     # Evaluate CNN-RNN model (run_32)
@@ -326,10 +326,11 @@ def parse_args():
     if not hasattr(conf, 'eval_sets'):
         conf.eval_sets = 'both'  # Options: 'val', 'test', 'both'
 
-    # Derive default output_dir from resume path (save in the run folder)
+    # Derive default output_dir from resume path (save in run_folder/evaluation/)
     if not hasattr(conf, 'output_dir') or not conf.output_dir:
         if hasattr(conf, 'resume') and conf.resume:
-            conf.output_dir = os.path.dirname(os.path.abspath(conf.resume))
+            run_dir = os.path.dirname(os.path.abspath(conf.resume))
+            conf.output_dir = os.path.join(run_dir, 'evaluation')
         else:
             conf.output_dir = os.path.join('output', 'evaluation', 'unknown_run')
 
