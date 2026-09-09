@@ -78,7 +78,7 @@ deleted. Its structure is documented in
 | # | Claim | Evidence |
 |---|-------|----------|
 | **A** | Register count is **CER-neutral** for CTC-ViT on IAM within seed noise (± 0.10 pp). | §4 quantitative table + [`outputs/tables/register_sweep.tex`](outputs/tables/register_sweep.tex) |
-| **B** | Registers **improve attention quality** on 3 of 4 metrics (entropy, sparsity/Gini, cross-character overlap). A residual "sink" pattern survives on patch tokens because CTC self-attention lacks a CLS-style query. | [`outputs/pub_figures/fig3_register_quantitative.png`](outputs/pub_figures/fig3_register_quantitative.png) |
+| **B** | Registers **partially improve attention quality**: character-attention entropy, peak spatial ordering (Spearman ρ), and the number of reading-order-aligned heads all improve from R = 0 to R = 8. A residual "sink" pattern survives on patch tokens because CTC self-attention lacks a CLS-style query. | §5.2/§5.3 below (from the report's register-effect analysis, §5.3 "Does the Register-Token Claim Hold in the CTC HTR Setting?") |
 | **C** | SWA reliably reduces CER by 0.2–0.4 pp when the base run has already converged; it **hurts** runs that never converged. | §4 SWA-vs-no-SWA row deltas |
 | **D** | For fine-tuning a pretrained ImageNet ViT-B/16 on IAM, a **~25 × differential LR** (backbone 2e-5, head 5e-4) drops test CER from 75.7 % → 15.1 % vs. naïve uniform LR. | §4 architecture-comparison table |
 | **E** | The **Beyond-Memorization** (ICDAR 2025) per-character attention methodology reproduces on CTC-supervised recognisers, giving a common visualisation grammar across generative and discriminative HTR pipelines. | Booklet GIF above + [`archive/beyond_memorization_reproduction/`](archive/beyond_memorization_reproduction/) (workspace only) |
@@ -184,31 +184,43 @@ python scripts/postprocessing/make_booklet_gif.py
 The seven source PNGs and the generator script are preserved in
 `archive/beyond_memorization_reproduction/` on the author's workspace.
 
-### 5.2 Register-effect self-attention — Claim B
+### 5.2 Register-effect self-attention (report §5.3) — Claim B
 
-<p align="center">
-  <img src="outputs/pub_figures/fig5_register_comparison_attn_talks.png" alt="Register-sweep CTC self-attention on the IAM sample ‘talks.’" width="720"/>
-</p>
+Reading CTC self-attention row by row on the IAM sample **talks.** across
+$R = 0, 4, 8, 16$ registers reveals a clear register-count effect: at
+$R = 0$ the query for the first character ("t") attends broadly across
+the entire image — whole vertical bands of unrelated regions light up,
+the classic "attention sink" pattern Darcet _et al._ (2024) describe for
+register-free ViTs, here surfacing on CTC patch tokens. At $R = 4$ the
+broad bands are visibly reduced and attention concentrates on the queried
+character's own stroke, though a secondary lobe on the same patch column
+persists across characters. At $R = 8$ the maps become essentially clean,
+narrow peaks that shift correctly with character index; at $R = 16$ the
+same behaviour continues with slightly more high-frequency noise.
 
-CTC-query self-attention on the IAM sample **talks.** across four
-register counts (0 / 2 / 4 / 8, top → bottom, shared colormap). The
-0-register run shows broad "sink" bands filling the attention map; adding
-registers narrows the peaks and separates neighbouring characters. The
-residual sink structure that survives at R = 8 motivates the argument in
-report §5.3 that CTC self-attention lacks a CLS-style query to fully
-absorb global structure.
+### 5.3 Register-effect — quantitative attention metrics (report §5.3) — Claim B
 
-### 5.3 Register-effect — quantitative attention metrics
+Three attention-quality metrics from
+[`utils/attention_metrics.py`](utils/attention_metrics.py), computed on the
+same fixed evaluation sample, corroborate the visual reading in §5.2:
 
-<p align="center">
-  <img src="outputs/pub_figures/fig3_register_quantitative.png" alt="Attention-quality metrics as a function of register count" width="720"/>
-</p>
+- **Character-attention entropy** (lower = more focused) decreases from a
+  median of **5.7 bits at R = 0 to 5.0 bits at R = 8**.
+- **Spatial ordering of attention peaks** — the Spearman correlation
+  between character position and attention-peak location — rises from
+  **ρ ≈ 0.59 at R = 0 to ρ ≈ 0.65 at R = 8**.
+- **Reading-order-aligned heads** — the count of self-attention heads
+  that follow left-to-right order — grows from **≈ 8 heads at R = 0 to
+  ≈ 10 heads at R = 16** (out of 8 heads/layer, averaged across layers).
 
-Four attention-quality metrics from
-[`utils/attention_metrics.py`](utils/attention_metrics.py) evaluated on the
-same runs used in §4.1. Three metrics (entropy ↓, Gini sparsity ↑,
-cross-character overlap ↓) improve monotonically with register count;
-peak-sharpness plateaus. Direct evidence for Claim B.
+One prediction from Darcet _et al._ does **not** transfer: in a
+classification ViT, registers end up carrying more L2 norm than patches,
+taking over the global-information role that sinks used to serve. Here,
+register tokens carry **lower** L2 norm than patches at every $R > 0$ —
+patches remain the higher-norm carriers, and a residual sink survives.
+This is attributed to CTC self-attention lacking a dedicated CLS-style
+query: patches are simultaneously query and key of the sink pattern, so
+registers alone cannot dissolve that self-consistency (report §5.3).
 
 ### 5.4 CTC posterior — defines the "peak column" vocabulary
 
