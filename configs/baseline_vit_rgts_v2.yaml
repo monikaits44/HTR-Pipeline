@@ -47,7 +47,7 @@ preproc:
 
 train:
   lr: 0.001           # Effective: stem=5e-4, transformer=3e-4 (set in trainer.py)
-  num_epochs: 80
+  num_epochs: 150
   batch_size: 8        # Effective batch = 32 (gradient_accumulation=4 for ViT)
   scheduler: mstep     # Ignored for vit_rgts — uses warmup+cosine internally
   save_every_k_epochs: 1
@@ -90,3 +90,14 @@ arch:
   rnn_type: lstm
   rnn_layers: 3
   rnn_hidden_size: 256
+
+# Stochastic Weight Averaging (SWA)
+# Averages weights in the final training phase for better generalisation.
+# Set swa.enabled=true (or override via CLI: swa.enabled=true swa.start_epoch=110)
+swa:
+  enabled: false
+  start_epoch: 110         # Begin averaging at this epoch (last ~25% of 150)
+  anneal_epochs: 10       # SWALR cosine-anneal period
+  anneal_strategy: cos
+  swa_lr: 5.0e-4
+  update_bn_steps: 0      # 0 = full train loader for BN recalibration

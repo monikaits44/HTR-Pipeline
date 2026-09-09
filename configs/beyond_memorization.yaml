@@ -1,0 +1,65 @@
+# =============================================================================
+# Beyond-Memorization (ICDAR 2025) — Paper Reproduction Config
+# =============================================================================
+# Faithful reproduction of:
+#   "Beyond Memorization: Training-Free Style Mixing for Variability in
+#    Handwritten Text Generation Using Writer Embedding Injection in
+#    Pretrained Diffusion Models" — Gurav, Chanda, Krishnan (ICDAR 2025)
+#   Official code: https://github.com/aniketntnu/Beyond-Memorization
+#   Base model  : WordStylist (latent diffusion, ICDAR 2023)
+#
+# This config drives the official inference script
+# (external/Beyond-Memorization/regFrmTrnVariStyleMixOcr.py) via the launcher
+# external/Beyond-Memorization/run_from_config.py. It generates style-mixed
+# handwriting AND the per-character cross-attention maps (paper Fig. 5 / 6).
+#
+# All paths are relative to the workspace root unless absolute.
+# =============================================================================
+
+# ---- Repository (official code) ----------------------------------------------
+repo_dir: external/Beyond-Memorization
+entrypoint: regFrmTrnVariStyleMixOcr.py
+
+# ---- Pretrained assets -------------------------------------------------------
+# WordStylist EMA checkpoint (Google Drive folder 15jdDCoYuWAohKW_OEjD2LXWce0pxM7ux)
+model_path: external/Beyond-Memorization/models/ema_ckpt.pt
+# Stable Diffusion v1.5 dir (only the vae/ subfolder is used by the diffusion model)
+stable_dif_path: external/Beyond-Memorization/stable-diffusion-v1-5
+# Optional HTR/OCR model for quality filtering (only needed when use_ocr=1)
+htr_model_path: ""
+
+# ---- Data --------------------------------------------------------------------
+# Preprocessed IAM WORD crops, 64x256 grayscale PNG (run prepare_images.py first).
+# NOTE: IAM words.tgz requires (free) registration at
+#       https://fki.tic.heia-fr.ch/databases/iam-handwriting-database
+iam_path: data/IAM/words_64x256
+# Ground-truth file: "writerID,imageID word" (shipped with the repo)
+gt_train: external/Beyond-Memorization/gt/gany.filter27
+
+# ---- Output ------------------------------------------------------------------
+# Generated images + per-character attention maps are written here.
+save_path: outputs/beyond_memorization
+
+# ---- Model architecture (matches paper / WordStylist; do not change) ---------
+img_height: 64
+img_width: 256
+channels: 4            # latent channels (VAE)
+emb_dim: 320           # model_channels / context_dim
+num_heads: 4
+num_res_blocks: 1
+max_chars: 25          # MAX_CHARS (words longer than this are skipped)
+style_classes: 339     # number of IAM writer styles (hardcoded in repo)
+noise_steps: 600       # diffusion steps (tau)
+
+# ---- Inference / run knobs ---------------------------------------------------
+device: cuda:0
+batch_size: 4
+epochs: 1
+num_workers: 4
+latent: true           # work in VAE latent space
+vae_from_dict: 0       # 0 = encode images with VAE on the fly (needs real crops)
+use_ocr: 0             # 0 = save all generated images (no OCR filter, no HTR model)
+attention_visualization: 1   # save attention-map overlays
+# charLocation sweep [-1, 0, 1, 2, 3] is run internally by the script:
+#   -1 = original writer (baseline, noChange/)
+#    c = style mixed starting at character c (charIndex_c/)

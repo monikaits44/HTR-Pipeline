@@ -37,3 +37,12 @@ arch:
 
 # Note: Training settings (lr, num_epochs, batch_size) inherited from config.yaml
 # Override via CLI if needed: train.lr=5e-4 train.batch_size=4
+
+# Stochastic Weight Averaging (SWA)
+swa:
+  enabled: false
+  start_epoch: 110
+  anneal_epochs: 10
+  anneal_strategy: cos
+  swa_lr: 5.0e-5          # Pretrained model: lower SWA LR
+  update_bn_steps: 0

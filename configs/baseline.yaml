@@ -8,3 +8,12 @@ arch:
   rnn_hidden_size: 256
   flattening: 'maxpool'
   stn: False
+
+# Stochastic Weight Averaging (SWA)
+swa:
+  enabled: false
+  start_epoch: 110
+  anneal_epochs: 10
+  anneal_strategy: cos
+  swa_lr: 5.0e-4
+  update_bn_steps: 0

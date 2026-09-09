@@ -1,0 +1,46 @@
+# Fine-tuning config for TorchVision ViT-B/16 on IAM
+# Uses 2-group differential LR (legacy approach — proven best for ImageNet→HTR)
+#
+# Rationale: ImageNet→handwriting is a LARGE domain gap. ALL backbone layers
+# need equal, strong adaptation. LLRD (which gives lower layers less LR) hurts
+# convergence. Empirically: uniform backbone_lr=2e-5 → 15.4% CER vs LLRD → 26% CER.
+
+arch:
+  type: 'torchvision_vit'
+  model_name: 'vit_b_16'
+  pretrained: True
+  image_height: 128
+  image_width: 1024
+  num_registers: 4
+  freeze_backbone: False
+
+  # CTC head
+  head_type: 'rnn'
+  rnn_type: 'lstm'
+  rnn_layers: 3
+  rnn_hidden_size: 256
+
+# No LLRD — use legacy 2-group optimizer (backbone_lr + head_lr)
+# finetune.enabled is False so trainer.py uses the legacy path
+
+# Training settings
+train:
+  num_epochs: 150
+  batch_size: 8
+  gradient_accumulation: 4   # Effective batch = 32
+  augmentation: 'cnn'
+  save_every_k_epochs: 1
+
+# Preprocessing
+preproc:
+  image_height: 128
+  image_width: 1024
+
+# Stochastic Weight Averaging (SWA)
+swa:
+  enabled: false
+  start_epoch: 110         # ~75% of 150 epochs
+  anneal_epochs: 8
+  anneal_strategy: cos
+  swa_lr: 5.0e-6          # Very conservative for pretrained fine-tuning
+  update_bn_steps: 0

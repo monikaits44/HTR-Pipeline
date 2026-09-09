@@ -1,0 +1,93 @@
+# =============================================================================
+# HTR-VT + Registers (R=4) + 2-D grid  —  READ2016
+# =============================================================================
+# Implements the recommendation from
+#   documents/most_most_latest/HTRVT_REGISTERS_BM_ATTENTION_FEASIBILITY.md
+#
+# Goal: HTR-VT-style recognition that ALSO yields Beyond-Memorization-style
+#       2-D per-character attention maps.
+#
+# Three combined ideas:
+#   1. HTR-VT  (Li et al., PR 2025): ResNet CNN stem + ViT encoder + CTC,
+#      with span-masking regularization.
+#   2. Registers (Darcet et al., ICLR 2024): R=4 learnable tokens that act as a
+#      background/whitespace sink to clean up attention.
+#   3. Beyond-Memorization attention: per-character localization. To get genuine
+#      2-D blobs (not 1-D strips) we keep a thin Hp x Wp token grid inside the
+#      transformer ("mode B"), collapsing height only at the CTC head.
+#
+# Usage:
+#   python scripts/trainer.py configs/htrvt_read2016_r4.yaml
+#
+# Register sweep (override from CLI):
+#   python scripts/trainer.py configs/htrvt_read2016_r4.yaml arch.num_registers=0
+# =============================================================================
+
+resume: null
+device: cuda:0
+
+data:
+  path: ./data/READ2016/processed
+  mode: iam            # READ2016 prepared in the standard {train,val,test}/gt.txt layout
+
+preproc:
+  image_height: 128
+  image_width: 1024
+
+train:
+  lr: 0.001            # Effective: backbone=5e-4, head=1e-3 (set in trainer.py)
+  num_epochs: 80
+  batch_size: 8        # Effective batch = 16 (gradient_accumulation=2 for ViT)
+  scheduler: mstep     # Ignored for htrvt — uses warmup+cosine internally
+  save_every_k_epochs: 1
+  num_workers: 8
+  augmentation: cnn    # HTR-VT has a strong CNN stem + span-mask regularizer
+
+eval:
+  batch_size: 8
+  num_workers: 8
+  wer_mode: tokenizer
+
+arch:
+  type: htrvt
+
+  image_height: 128
+  image_width: 1024
+
+  # ---- Transformer dimensions (HTR-VT is shallow: depth=4) ----
+  dim: 256
+  depth: 4
+  heads: 8
+  mlp_dim: 1024
+
+  # ---- 2-D token grid (mode B — the key to BM-style 2-D attention maps) ----
+  # Keep grid_height>1 rows inside the encoder; collapse to grid_width
+  # left-to-right timesteps only for the CTC head.
+  grid_height: 4       # rows kept for 2-D attention (1 = faithful HTR-VT, no 2-D map)
+  grid_width: 128      # CTC timesteps (>= 2*max_chars+1; READ2016 max=43 -> 128 ok)
+
+  # ---- Register tokens (Darcet et al. 2024) ----
+  num_registers: 4     # Override via CLI for sweep
+
+  # ---- Span masking (HTR-VT regularizer #1, train-only) ----
+  span_mask_enabled: true
+  span_mask_ratio: 0.4
+  span_mask_length: 4
+
+  # ---- Regularization ----
+  dropout: 0.1
+  emb_dropout: 0.1
+
+  # ---- CTC Head ----
+  head_type: rnn       # ViT -> BiLSTM -> CTC
+  rnn_type: lstm
+  rnn_layers: 3
+  rnn_hidden_size: 256
+
+swa:
+  enabled: false
+  start_epoch: 60
+  anneal_epochs: 10
+  anneal_strategy: cos
+  swa_lr: 5.0e-4
+  update_bn_steps: 0

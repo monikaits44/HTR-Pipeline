@@ -1,10 +1,15 @@
 resume:
 
+seed: 42  # Random seed for reproducibility (-1 to disable)
+
 device: 'cuda:0'  # select from 'cuda:0', 'cpu'
 
 # datasets
 data:
   path: './data/IAM/processed_lines'
+  mode: 'iam'  # 'iam' (Aachen splits) | 'synthetic' (synth train/val, IAM test)
+  synthetic_path: '/home/woody/iwi5/iwi5369h/projects/synth_htr/synthetic_processed_lines'
+  lmdb_path: '/home/woody/iwi5/iwi5369h/projects/synth_htr/synthesized_images_1M.lmdb'
 
 # preprocessing
 preproc:
@@ -14,7 +19,7 @@ preproc:
 # training
 train:
   lr: 1e-3
-  num_epochs: 80 # Earlier was 1 for quick testing, 800 for full training  
+  num_epochs: 150 # Standard 150 epochs for all final experiments
   batch_size: 8  # Reduced from 16 to handle memory constraints
   scheduler: 'mstep'  # right now only 'mstep' is supported, i.e. multistep
   save_every_k_epochs: 1 # Earlier was 50
@@ -25,3 +30,19 @@ eval:
   batch_size: 8  # Reduced from 32 to handle memory constraints
   num_workers: 8
   wer_mode: 'tokenizer' # select from 'tokenizer', 'space'
+
+# Stochastic Weight Averaging (SWA)
+# SWA averages model weights over the final phase of training, yielding
+# better generalisation without extra computational cost at inference.
+# Reference: Izmailov et al. 2018 (https://arxiv.org/abs/1803.05407)
+swa:
+  enabled: false          # Set true to activate SWA
+  start_epoch: 110        # Epoch at which SWA weight averaging begins
+                          # Rule-of-thumb: last 25% of 150 epochs
+  anneal_epochs: 10       # Cosine-annealing period for the SWA LR
+                          # (SWALR cycles down to swa_lr over this many epochs)
+  anneal_strategy: cos    # 'cos' (recommended) or 'linear'
+  swa_lr: 5.0e-4          # Target LR during SWA phase
+                          # Typically ~1-5× the minimum LR of your cosine schedule
+  update_bn_steps: 0      # BN-update passes over train data after SWA
+                          # 0 = use entire train loader (safe default)

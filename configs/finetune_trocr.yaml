@@ -1,0 +1,55 @@
+# Fine-tuning config for TrOCR Base (Handwritten) on IAM
+# Uses Layer-wise LR Decay (LLRD) — all layers trainable from start
+#
+# Strategy: TrOCR-base-handwritten encoder is already trained on handwriting.
+# We fine-tune the full encoder with low LR (preserve HW knowledge)
+# while training the CTC head with higher LR.
+#
+# Key insight: Unlike TorchVision ViT (ImageNet → handwriting = large domain gap),
+# TrOCR is already in-domain. Use smaller base_lr and gentler LLRD.
+
+arch:
+  type: 'trocr'
+  model_name: 'microsoft/trocr-base-handwritten'
+  image_height: 384
+  image_width: 384
+  freeze_encoder: False      # LLRD handles it; no hard freeze
+
+  # CTC head
+  head_type: 'rnn'
+  rnn_type: 'lstm'
+  rnn_layers: 2
+  rnn_hidden_size: 256
+
+# Fine-tuning hyperparameters
+finetune:
+  enabled: True
+  base_lr: 1e-5             # Moderate — encoder already handwriting-adapted
+  head_lr: 5e-4             # Head needs to learn CTC alignment from scratch
+  lr_decay_rate: 0.9        # Gentle decay (encoder already in-domain)
+  weight_decay: 0.01        # Matching legacy path
+  head_wd: 0.0
+  warmup_epochs: 5          # Warmup from 10% to full LR
+  gradual_unfreeze: False   # All layers trainable from start
+
+# Training settings
+train:
+  num_epochs: 150
+  batch_size: 4              # 384×384 input is memory-heavy
+  gradient_accumulation: 8   # Effective batch = 32
+  augmentation: 'cnn'        # Moderate — don't corrupt pretrained distribution
+  save_every_k_epochs: 1
+
+# Preprocessing (overridden by TrOCR backbone internally)
+preproc:
+  image_height: 384
+  image_width: 384
+
+# Stochastic Weight Averaging (SWA)
+swa:
+  enabled: false
+  start_epoch: 110         # ~75% of 150 epochs
+  anneal_epochs: 8
+  anneal_strategy: cos
+  swa_lr: 5.0e-6          # Low LR — TrOCR already in-domain
+  update_bn_steps: 0

@@ -35,3 +35,12 @@ arch:
   rnn_type: 'lstm'
   rnn_layers: 2       # reduced from 3 (proportional to backbone size)
   rnn_hidden_size: 128 # reduced from 256 (proportional to dim)
+
+# Stochastic Weight Averaging (SWA)
+swa:
+  enabled: false
+  start_epoch: 60
+  anneal_epochs: 10
+  anneal_strategy: cos
+  swa_lr: 5.0e-4
+  update_bn_steps: 0
