@@ -7,9 +7,9 @@ from tqdm import tqdm
 set_all_characters = ''' !"#&'()*+,-./0123456789:;?ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'''
 
 # Paths
-DATA_DIR = r"E:\Projects\HTR_PR_Lab\HTR-Pipeline\data\synthetic"
-input_file = os.path.join(DATA_DIR, 'synthetic_text_100K_modified.txt')
-output_file = os.path.join(DATA_DIR, 'synthetic_text_100K_modified_filtered.txt')
+DATA_DIR = '/home/woody/iwi5/iwi5369h/projects/synth_htr'
+input_file = os.path.join(DATA_DIR, 'cc100_random_subset_1M_modified.txt')
+output_file = os.path.join(DATA_DIR, 'cc100_random_subset_1M_modified_filtered.txt')
 
 def process_chunk(input_file, output_file, start, end, pattern):
     with open(input_file, 'rb') as infile:

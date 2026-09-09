@@ -3,7 +3,7 @@ from PIL import Image, ImageDraw, ImageFont
 from tqdm import tqdm
 
 # Directory containing font files
-DATA_DIR = r'E:\Projects\HTR_PR_Lab\HTR-Pipeline\data\synthetic'
+DATA_DIR = '/home/woody/iwi5/iwi5369h/projects/synth_htr'
 font_dir = os.path.join(DATA_DIR, 'fonts_extracted')
 
 output_dir = os.path.join(DATA_DIR, 'synthesized_images')

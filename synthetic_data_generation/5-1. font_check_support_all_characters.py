@@ -86,8 +86,8 @@ def check_fonts_in_directory(directory, characters, output_file):
     print(f"Results saved to: {output_file}")
 
 # Specify the directory with fonts and the character set to check
-font_directory = r'E:\Projects\HTR_PR_Lab\HTR-Pipeline\data\synthetic\fonts_extracted'
-output_file = os.path.join(r'E:\Projects\HTR_PR_Lab\HTR-Pipeline\data\synthetic', 'missing_characters_fonts.txt')
+font_directory = '/home/woody/iwi5/iwi5369h/projects/synth_htr/fonts_extracted'
+output_file = os.path.join('/home/woody/iwi5/iwi5369h/projects/synth_htr', 'missing_characters_fonts.txt')
 characters = ''' !"#&'()*+,-./0123456789:;?ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'''
 
 # Run the function

@@ -7,7 +7,7 @@ import os
 def parse_args():
     parser = argparse.ArgumentParser(description='Extract random text lines from C4 dataset (replaces CC100).')
     parser.add_argument('--split', type=str, default="train", help='split type (train/validation)')
-    parser.add_argument('--num_lines', type=int, default=10000000, help='number of lines to extract')
+    parser.add_argument('--num_lines', type=int, default=1000000, help='number of lines to extract')
     parser.add_argument('--num_processes', type=int, default=None, help='number of processes (default: CPU count)')
     return parser.parse_args()
 
@@ -29,9 +29,9 @@ def worker_process(args):
             outfile.write(item['text'] + '\n')
             indexfile.write(str(idx) + '\n')
 
-def extract_random_lines_from_hf_dataset(num_lines=10000000, lang='en',
-                                         output_file='c4_random_subset_10M.txt',
-                                         index_file='c4_random_indices_10M.txt',
+def extract_random_lines_from_hf_dataset(num_lines=1000000, lang='en',
+                                         output_file='c4_random_subset_1M.txt',
+                                         index_file='c4_random_indices_1M.txt',
                                          num_processes=None, cache_dir=None):
     
     # Set defaults
@@ -40,7 +40,7 @@ def extract_random_lines_from_hf_dataset(num_lines=10000000, lang='en',
     
     if cache_dir is None:
         # Use data/synthetic directory for cache
-        cache_dir = r"E:\Projects\HTR_PR_Lab\HTR-Pipeline\data\synthetic\cache"
+        cache_dir = '/home/woody/iwi5/iwi5369h/projects/synth_htr/cache'
         os.makedirs(cache_dir, exist_ok=True)
     
     print(f"Configuration:")
@@ -132,11 +132,11 @@ def extract_random_lines_from_hf_dataset(num_lines=10000000, lang='en',
 # Example usage
 if __name__ == "__main__":
     # Set output paths in data/synthetic directory
-    output_dir = r"E:\Projects\HTR_PR_Lab\HTR-Pipeline\data\synthetic"
+    output_dir = '/home/woody/iwi5/iwi5369h/projects/synth_htr'
     os.makedirs(output_dir, exist_ok=True)
     
-    output_file = os.path.join(output_dir, 'cc100_random_subset_10M.txt')
-    index_file = os.path.join(output_dir, 'cc100_random_indices_10M.txt')
+    output_file = os.path.join(output_dir, 'cc100_random_subset_1M.txt')
+    index_file = os.path.join(output_dir, 'cc100_random_indices_1M.txt')
     
     num_processes = args.num_processes if args.num_processes else os.cpu_count()
     

@@ -28,8 +28,8 @@ def chunkify(file_path, num_chunks):
 
 
 def main():
-    DATA_DIR = r'E:\Projects\HTR_PR_Lab\HTR-Pipeline\data\synthetic'
-    file_path = os.path.join(DATA_DIR, 'synthetic_text_100K_modified_filtered.txt')
+    DATA_DIR = '/home/woody/iwi5/iwi5369h/projects/synth_htr'
+    file_path = os.path.join(DATA_DIR, 'cc100_random_subset_1M_modified_filtered.txt')
     num_workers = mp.cpu_count()  # Number of parallel workers
 
     # Create a pool of workers

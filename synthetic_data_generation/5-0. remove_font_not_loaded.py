@@ -4,7 +4,7 @@ from multiprocessing import Pool, cpu_count
 from tqdm import tqdm
 
 # Directory containing fonts
-font_dir = r'E:\Projects\HTR_PR_Lab\HTR-Pipeline\data\synthetic\fonts_extracted'
+font_dir = '/home/woody/iwi5/iwi5369h/projects/synth_htr/fonts_extracted'
 
 # Allowed font file extensions
 allowed_extensions = ['.otf', '.ttf', '.OTF', '.TTF']

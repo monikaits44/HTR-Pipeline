@@ -41,7 +41,9 @@ def download_file(url, directory, max_retries=3):
     return False, "Max retries exceeded"
 
 # Read URLs from CSV file
-csv_path = r"E:\Projects\HTR_PR_Lab\HTR-Pipeline\data\synthetic\font_links_license.csv"
+csv_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data', 'synthetic', 'font_links_license.csv')
+if not os.path.exists(csv_path):
+    csv_path = '/home/woody/iwi5/iwi5369h/projects/synth_htr/font_links_license.csv'
 urls = []
 
 print(f"Reading font links from: {csv_path}")
@@ -53,7 +55,7 @@ with open(csv_path, 'r', encoding='utf-8') as file:
 print(f"Total fonts to download: {len(urls)}")
 
 # Directory to save the downloaded files
-download_directory = r"E:\Projects\HTR_PR_Lab\HTR-Pipeline\data\synthetic\fonts"
+download_directory = '/home/woody/iwi5/iwi5369h/projects/synth_htr/fonts'
 
 # Create the directory if it doesn't exist
 os.makedirs(download_directory, exist_ok=True)

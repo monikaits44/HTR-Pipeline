@@ -13,10 +13,10 @@ print("STEP 6: FINAL IMAGE GENERATION WITH LMDB")
 print("="*60)
 
 # Paths
-DATA_DIR = r'E:\Projects\HTR_PR_Lab\HTR-Pipeline\data\synthetic'
-font_dir = r'E:\Projects\HTR_PR_Lab\HTR-Pipeline\data\synthetic\fonts_extracted'
-text_file = os.path.join(DATA_DIR, 'synthetic_text_100K_modified_filtered.txt')
-lmdb_output_path = os.path.join(DATA_DIR, 'synthesized_images_100K.lmdb')
+DATA_DIR = '/home/woody/iwi5/iwi5369h/projects/synth_htr'
+font_dir = '/home/woody/iwi5/iwi5369h/projects/synth_htr/fonts_extracted'
+text_file = os.path.join(DATA_DIR, 'cc100_random_subset_1M_modified_filtered.txt')
+lmdb_output_path = os.path.join(DATA_DIR, 'synthesized_images_1M.lmdb')
 
 print(f"Font directory: {font_dir}")
 print(f"Text file: {text_file}")
@@ -139,39 +139,54 @@ if __name__ == '__main__':
     # Prepare the inputs for multiprocessing - pass font_files directly as a regular list
     inputs = [(i, text, font_files) for i, text in enumerate(texts)]
 
-    print(f"\nGenerating {len(inputs)} synthetic images using {cpu_count()} processes...")
-    print("This may take a while...\n")
+    num_workers = min(cpu_count(), 8)  # Limit workers to control memory usage
+    print(f"\nGenerating {len(inputs)} synthetic images using {num_workers} processes...")
+    print("Writing directly to LMDB to avoid OOM...\n")
     
-    # Generate images in parallel
-    with Pool(cpu_count()) as pool:
-        results = list(tqdm(pool.imap_unordered(generate_image, inputs), 
+    # Create LMDB database - write incrementally to avoid OOM
+    env = lmdb.open(lmdb_output_path, map_size=int(40e9))  # 40GB map size for 1M images
+    
+    successful_count = 0
+    failed_count = 0
+    batch_size = 1000  # Commit every N images to balance speed and memory
+    batch = []
+    
+    with Pool(num_workers) as pool:
+        for result in tqdm(pool.imap_unordered(generate_image, inputs), 
                            total=len(inputs), 
-                           desc="Generating images"))
-
-    # Filter out None results (failed generations)
-    successful_results = [r for r in results if r is not None]
-    failed_count = results.count(None)
+                           desc="Generating images"):
+            if result is not None:
+                batch.append(result)
+                if len(batch) >= batch_size:
+                    # Write batch to LMDB
+                    with env.begin(write=True) as txn:
+                        for i, img_bytes, text in batch:
+                            key = f'{i:010}'.encode('ascii')
+                            data = {'image': img_bytes, 'text': text}
+                            txn.put(key, pickle.dumps(data))
+                    successful_count += len(batch)
+                    batch = []
+            else:
+                failed_count += 1
     
-    print(f"\nWriting {len(successful_results)} images to LMDB database...")
-    
-    # Create LMDB database and write all successful results
-    env = lmdb.open(lmdb_output_path, map_size=int(100e9))  # 100GB map size
-    
-    with env.begin(write=True) as txn:
-        for result in tqdm(successful_results, desc="Writing to LMDB"):
-            i, img_bytes, text = result
-            key = f'{i:07}'.encode('ascii')
-            data = {'image': img_bytes, 'text': text}
-            txn.put(key, pickle.dumps(data))
+    # Write remaining batch
+    if batch:
+        with env.begin(write=True) as txn:
+            for i, img_bytes, text in batch:
+                key = f'{i:010}'.encode('ascii')
+                data = {'image': img_bytes, 'text': text}
+                txn.put(key, pickle.dumps(data))
+        successful_count += len(batch)
     
     env.close()
     
     print(f"\n{'='*60}")
     print("IMAGE GENERATION COMPLETE")
     print(f"{'='*60}")
-    print(f"Successfully generated: {len(successful_results)} images")
+    print(f"Successfully generated: {successful_count} images")
     print(f"Failed: {failed_count} images")
     print(f"Total processed: {len(texts)}")
     print(f"LMDB database saved to: {lmdb_output_path}")
-    if os.path.exists(lmdb_output_path):
-        print(f"Database size: {os.path.getsize(lmdb_output_path) / (1024**3):.2f} GB")
+    lmdb_data_file = os.path.join(lmdb_output_path, 'data.mdb')
+    if os.path.exists(lmdb_data_file):
+        print(f"Database size: {os.path.getsize(lmdb_data_file) / (1024**3):.2f} GB")

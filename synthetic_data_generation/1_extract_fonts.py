@@ -8,8 +8,8 @@ from pathlib import Path
 from tqdm import tqdm
 import shutil
 
-FONT_DIR = r"E:\Projects\HTR_PR_Lab\HTR-Pipeline\data\synthetic\fonts"
-EXTRACTED_DIR = r"E:\Projects\HTR_PR_Lab\HTR-Pipeline\data\synthetic\fonts_extracted"
+FONT_DIR = '/home/woody/iwi5/iwi5369h/projects/synth_htr/fonts'
+EXTRACTED_DIR = '/home/woody/iwi5/iwi5369h/projects/synth_htr/fonts_extracted'
 
 def extract_zip(zip_path, extract_to):
     """Extract a ZIP file"""

@@ -4,10 +4,10 @@ import os
 from tqdm import tqdm
 
 # Paths
-DATA_DIR = r"E:\Projects\HTR_PR_Lab\HTR-Pipeline\data\synthetic"
+DATA_DIR = '/home/woody/iwi5/iwi5369h/projects/synth_htr'
 LENGTH_COUNTS_FILE = os.path.join(DATA_DIR, "text_length_counts.txt")
-INPUT_FILE = os.path.join(DATA_DIR, "synthetic_text_100K.txt")
-OUTPUT_FILE = os.path.join(DATA_DIR, "synthetic_text_100K_modified.txt")
+INPUT_FILE = os.path.join(DATA_DIR, "cc100_random_subset_1M.txt")
+OUTPUT_FILE = os.path.join(DATA_DIR, "cc100_random_subset_1M_modified.txt")
 
 # Global variables
 distribution = {}

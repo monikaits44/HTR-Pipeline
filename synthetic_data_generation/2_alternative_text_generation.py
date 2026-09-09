@@ -90,10 +90,10 @@ if __name__ == "__main__":
     import argparse
     
     parser = argparse.ArgumentParser(description='Generate synthetic English text')
-    parser.add_argument('--num_lines', type=int, default=50000, help='number of lines to generate')
+    parser.add_argument('--num_lines', type=int, default=1000000, help='number of lines to generate')
     args = parser.parse_args()
     
-    output_dir = r"E:\Projects\HTR_PR_Lab\HTR-Pipeline\data\synthetic"
-    output_file = os.path.join(output_dir, f'synthetic_text_{args.num_lines//1000}K.txt')
+    output_dir = '/home/woody/iwi5/iwi5369h/projects/synth_htr'
+    output_file = os.path.join(output_dir, 'cc100_random_subset_1M.txt')
     
     generate_text_lines(args.num_lines, output_file)

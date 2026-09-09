@@ -6,8 +6,8 @@ import os
 text_lengths = []
 
 # Define IAM data paths
-iam_base = r"E:\Projects\HTR_PR_Lab\HTR-Pipeline\data\IAM\processed_lines"
-output_dir = r"E:\Projects\HTR_PR_Lab\HTR-Pipeline\data\synthetic"
+iam_base = '/home/hpc/iwi5/iwi5369h/HTR-Pipeline/data/IAM/processed_lines'
+output_dir = '/home/woody/iwi5/iwi5369h/projects/synth_htr'
 
 # Read from all splits (train, val, test) to get complete distribution
 splits = ['train', 'val', 'test']
