@@ -88,28 +88,6 @@ class CTCtopC(nn.Module):
         return y
 
 
-class CTCtopLinear(nn.Module):
-    """
-    Linear CTC head for sequence models.
-    Takes [T, B, D] or [B, D, 1, T] and outputs [T, B, nclasses]
-    """
-    def __init__(self, input_size, nclasses, dropout=0.0):
-        super(CTCtopLinear, self).__init__()
-        
-        self.dropout = nn.Dropout(dropout)
-        self.linear = nn.Linear(input_size, nclasses)
-    
-    def forward(self, x):
-        # Handle both formats
-        if x.dim() == 4:  # [B, C, H, W] where H=1
-            x = x.squeeze(2).permute(2, 0, 1)  # [T, B, C]
-        # x is now [T, B, D]
-        
-        x = self.dropout(x)
-        y = self.linear(x)  # [T, B, nclasses]
-        return y
-
-
 class CTCtopR(nn.Module):
     def __init__(self, input_size, rnn_cfg, nclasses, rnn_type='gru', is_vit=False):
         super(CTCtopR, self).__init__()
@@ -493,6 +471,224 @@ class ViTRGTSBackbone(nn.Module):
         # === FINAL SHAPE FOR CTC ===============================================
         seq_tokens = patch_out.transpose(0, 1)                   # [T, B, D]
 
+        return seq_tokens, reg_out, attn_maps, token_norms, (Hp, Wp)
+
+
+class HTRVTBackbone(nn.Module):
+    """
+    HTR-VT-style backbone (Li et al., Pattern Recognition 2025) adapted for
+    Beyond-Memorization-style 2-D per-character attention maps + registers.
+
+    Design rationale (see documents/most_most_latest/
+    HTRVT_REGISTERS_BM_ATTENTION_FEASIBILITY.md):
+
+      * HTR-VT = ResNet feature stem + ViT encoder + CTC.
+      * The official HTR-VT collapses image height fully to a 1-D token row,
+        which makes self-attention an inherently 1-D strip. To obtain genuine
+        Beyond-Memorization 2-D character blobs, this backbone keeps a *thin*
+        2-D token grid (grid_height > 1, e.g. 4 rows) inside the transformer
+        ("mode B"), and only collapses the height for the CTC head.
+      * Register tokens (Darcet et al. 2024) are prepended so the model has a
+        dedicated sink for background/whitespace mass -> cleaner attention.
+      * Span masking (HTR-VT novelty #1) masks contiguous spans of feature
+        tokens during training as an in-run masked-image-modelling regularizer.
+
+    Input:  x : [B, 1, H, W]  (grayscale line image)
+    Output (forward):
+        seq_tokens : [Wp, B, D]      patch tokens (height-collapsed) for CTC
+        reg_tokens : [B, R, D]       register tokens
+        grid_size  : (Hp, Wp)        2-D token grid kept inside the encoder
+    """
+
+    def __init__(
+        self,
+        image_height: int = 128,
+        image_width: int = 1024,
+        embed_dim: int = 256,
+        depth: int = 4,
+        num_heads: int = 8,
+        mlp_ratio: float = 4.0,
+        num_registers: int = 4,
+        grid_height: int = 4,
+        grid_width: int = 128,
+        dropout: float = 0.1,
+        emb_dropout: float = 0.1,
+        span_mask_enabled: bool = True,
+        span_mask_ratio: float = 0.4,
+        span_mask_length: int = 4,
+    ):
+        super().__init__()
+        self.embed_dim = embed_dim
+        self.num_registers = num_registers
+        self.grid_height = grid_height
+        self.grid_width = grid_width
+        self.span_mask_enabled = span_mask_enabled
+        self.span_mask_ratio = span_mask_ratio
+        self.span_mask_length = span_mask_length
+
+        # ---- ResNet-style CNN feature stem (HTR-VT front-end) -------------
+        # Strong local feature extractor (the HTR-VT ablation shows it is
+        # essential for ViT-on-small-data). Reuses the module-level BasicBlock.
+        self.cnn_stem = nn.Sequential(
+            nn.Conv2d(1, embed_dim // 8, kernel_size=7, stride=2, padding=3, bias=False),
+            nn.BatchNorm2d(embed_dim // 8),
+            nn.ReLU(inplace=True),
+            BasicBlock(embed_dim // 8, embed_dim // 4, stride=2),
+            BasicBlock(embed_dim // 4, embed_dim // 2, stride=2),
+            BasicBlock(embed_dim // 2, embed_dim, stride=2),
+        )
+        # Lock the token grid to a fixed (grid_height x grid_width) regardless
+        # of input size -> consistent batching and a fixed positional grid.
+        self.stem_pool = nn.AdaptiveMaxPool2d((grid_height, grid_width))
+
+        self.num_patches = grid_height * grid_width
+        seq_len = num_registers + self.num_patches
+
+        # Register tokens + learnable mask token (for span masking)
+        self.register_tokens = nn.Parameter(torch.zeros(1, max(num_registers, 1), embed_dim))
+        self.mask_token = nn.Parameter(torch.zeros(1, 1, embed_dim))
+
+        # Learned positional embeddings over (registers + 2-D patch grid)
+        self.pos_embed = nn.Parameter(torch.zeros(1, seq_len, embed_dim))
+        self.emb_dropout = nn.Dropout(emb_dropout)
+
+        encoder_layer = nn.TransformerEncoderLayer(
+            d_model=embed_dim,
+            nhead=num_heads,
+            dim_feedforward=int(embed_dim * mlp_ratio),
+            dropout=dropout,
+            activation="gelu",
+            batch_first=True,
+            norm_first=True,
+        )
+        self.encoder = nn.TransformerEncoder(encoder_layer, num_layers=depth)
+
+        self._init_weights()
+
+    def _init_weights(self):
+        nn.init.normal_(self.register_tokens, std=0.02)
+        nn.init.normal_(self.mask_token, std=0.02)
+        nn.init.normal_(self.pos_embed, std=0.02)
+
+    # ---- Span masking (HTR-VT) -------------------------------------------
+    def _apply_span_mask(self, patch_tokens):
+        """Mask contiguous spans of patch tokens with the learnable mask token.
+        patch_tokens: [B, L, D].  Train-time regularizer only."""
+        B, L, D = patch_tokens.shape
+        ratio = self.span_mask_ratio
+        span = max(1, int(self.span_mask_length))
+        num_spans = int(L * ratio) // span
+        if num_spans <= 0:
+            return patch_tokens
+        mask = torch.ones(B, L, 1, device=patch_tokens.device, dtype=patch_tokens.dtype)
+        for _ in range(num_spans):
+            idx = int(torch.randint(0, max(1, L - span), (1,)).item())
+            mask[:, idx:idx + span, :] = 0.0
+        return patch_tokens * mask + (1.0 - mask) * self.mask_token
+
+    def _stem(self, x):
+        x = self.cnn_stem(x)              # [B, D, H', W']
+        x = self.stem_pool(x)             # [B, D, Hp, Wp]
+        B, D, Hp, Wp = x.shape
+        # Flatten to [B, Hp*Wp, D]; token index = h*Wp + w (row-major)
+        patch_tokens = x.flatten(2).transpose(1, 2)
+        return patch_tokens, (Hp, Wp)
+
+    def _collapse_for_ctc(self, patch_out, Hp, Wp):
+        """Collapse the height dimension of the 2-D patch grid into a 1-D
+        left-to-right sequence for CTC.  patch_out: [B, Hp*Wp, D]."""
+        B, _, D = patch_out.shape
+        grid = patch_out.view(B, Hp, Wp, D)        # [B, Hp, Wp, D]
+        seq = grid.max(dim=1).values               # [B, Wp, D] (max over height)
+        return seq.transpose(0, 1)                 # [Wp, B, D]
+
+    def forward(self, x):
+        B = x.size(0)
+        patch_tokens, (Hp, Wp) = self._stem(x)
+
+        if self.training and self.span_mask_enabled:
+            patch_tokens = self._apply_span_mask(patch_tokens)
+
+        if self.num_registers > 0:
+            reg = self.register_tokens[:, :self.num_registers, :].expand(B, -1, -1)
+            tokens = torch.cat([reg, patch_tokens], dim=1)
+        else:
+            tokens = patch_tokens
+
+        tokens = tokens + self.pos_embed[:, :tokens.size(1), :]
+        tokens = self.emb_dropout(tokens)
+        encoded = self.encoder(tokens)
+
+        reg_out = encoded[:, :self.num_registers, :]
+        patch_out = encoded[:, self.num_registers:, :]
+        seq_tokens = self._collapse_for_ctc(patch_out, Hp, Wp)
+        return seq_tokens, reg_out, (Hp, Wp)
+
+    @torch.no_grad()
+    def forward_explain(self, x):
+        """Explainability pass. Span masking is OFF (eval). Returns:
+            seq_tokens : [Wp, B, D]
+            reg_tokens : [B, R, D]
+            attn_maps  : List[L] of [B, H, S, S]   (S = R + Hp*Wp)
+            token_norms: [B, S]
+            grid_size  : (Hp, Wp)
+        Per-character 2-D maps: for CTC peak t_c -> column w_c; take attention
+        to patch tokens [R:] and reshape to (Hp, Wp).
+        """
+        B = x.size(0)
+        patch_tokens, (Hp, Wp) = self._stem(x)
+
+        if self.num_registers > 0:
+            reg = self.register_tokens[:, :self.num_registers, :].expand(B, -1, -1)
+            tokens = torch.cat([reg, patch_tokens], dim=1)
+        else:
+            tokens = patch_tokens
+
+        tokens = tokens + self.pos_embed[:, :tokens.size(1), :]
+        tokens = self.emb_dropout(tokens)
+
+        attn_maps = []
+        x_tokens = tokens
+        for layer in self.encoder.layers:
+            attn_module = layer.self_attn
+            embed_dim = attn_module.embed_dim
+            num_heads = attn_module.num_heads
+            head_dim = embed_dim // num_heads
+
+            normed = layer.norm1(x_tokens)
+            if attn_module._qkv_same_embed_dim:
+                q, k, v = torch.nn.functional.linear(
+                    normed, attn_module.in_proj_weight, attn_module.in_proj_bias
+                ).chunk(3, dim=-1)
+            else:
+                q = torch.nn.functional.linear(normed, attn_module.q_proj_weight, attn_module.in_proj_bias[:embed_dim])
+                k = torch.nn.functional.linear(normed, attn_module.k_proj_weight, attn_module.in_proj_bias[embed_dim:2*embed_dim])
+                v = torch.nn.functional.linear(normed, attn_module.v_proj_weight, attn_module.in_proj_bias[2*embed_dim:])
+
+            B_, S_, E_ = q.shape
+            q = q.view(B_, S_, num_heads, head_dim).transpose(1, 2)
+            k = k.view(B_, S_, num_heads, head_dim).transpose(1, 2)
+            v = v.view(B_, S_, num_heads, head_dim).transpose(1, 2)
+
+            attn_weights = torch.matmul(q, k.transpose(-1, -2)) / math.sqrt(head_dim)
+            attn_weights = torch.softmax(attn_weights, dim=-1)
+            attn_maps.append(attn_weights.cpu())
+
+            attn_output = torch.matmul(attn_weights, v)
+            attn_output = attn_output.transpose(1, 2).contiguous().view(B_, S_, E_)
+            attn_output = torch.nn.functional.linear(
+                attn_output, attn_module.out_proj.weight, attn_module.out_proj.bias
+            )
+            x_tokens = x_tokens + attn_output
+
+            normed = layer.norm2(x_tokens)
+            ff_output = layer.linear2(layer.dropout(layer.activation(layer.linear1(normed))))
+            x_tokens = x_tokens + ff_output
+
+        reg_out = x_tokens[:, :self.num_registers, :]
+        patch_out = x_tokens[:, self.num_registers:, :]
+        token_norms = x_tokens.norm(dim=-1).cpu()
+        seq_tokens = self._collapse_for_ctc(patch_out, Hp, Wp)
         return seq_tokens, reg_out, attn_maps, token_norms, (Hp, Wp)
 
 
@@ -1195,6 +1391,65 @@ class HTRNet(nn.Module):
                 )
         
         # ------------------------------------------------------------------
+        # 2b) HTR-VT path  (HTR-VT + registers + 2-D grid for BM-style maps)
+        # ------------------------------------------------------------------
+        elif self.arch_type == "htrvt":
+            image_height = getattr(arch_cfg, "image_height", 128)
+            image_width  = getattr(arch_cfg, "image_width", 1024)
+            dim     = getattr(arch_cfg, "dim", 256)
+            depth   = getattr(arch_cfg, "depth", 4)
+            heads   = getattr(arch_cfg, "heads", 8)
+            mlp_dim = getattr(arch_cfg, "mlp_dim", int(dim * 4))
+            mlp_ratio = getattr(arch_cfg, "vit_mlp_ratio", float(mlp_dim) / float(dim))
+            num_registers = getattr(arch_cfg, "num_registers", 4)
+            grid_height = getattr(arch_cfg, "grid_height", 4)
+            grid_width  = getattr(arch_cfg, "grid_width", 128)
+            dropout = getattr(arch_cfg, "dropout", 0.1)
+            emb_dropout = getattr(arch_cfg, "emb_dropout", 0.1)
+            span_mask_enabled = getattr(arch_cfg, "span_mask_enabled", True)
+            span_mask_ratio = getattr(arch_cfg, "span_mask_ratio", 0.4)
+            span_mask_length = getattr(arch_cfg, "span_mask_length", 4)
+
+            self.backbone = HTRVTBackbone(
+                image_height=image_height,
+                image_width=image_width,
+                embed_dim=dim,
+                depth=depth,
+                num_heads=heads,
+                mlp_ratio=mlp_ratio,
+                num_registers=num_registers,
+                grid_height=grid_height,
+                grid_width=grid_width,
+                dropout=dropout,
+                emb_dropout=emb_dropout,
+                span_mask_enabled=span_mask_enabled,
+                span_mask_ratio=span_mask_ratio,
+                span_mask_length=span_mask_length,
+            )
+
+            hidden = self.backbone.embed_dim
+            head = getattr(arch_cfg, "head_type", "rnn")
+            if head == "cnn":
+                self.top = CTCtopC(hidden, nclasses)
+            elif head == "both":
+                self.top = CTCtopB(
+                    hidden,
+                    (arch_cfg.rnn_hidden_size, arch_cfg.rnn_layers),
+                    nclasses,
+                    rnn_type=arch_cfg.rnn_type,
+                    is_vit=True,
+                    return_both=True,
+                )
+            else:
+                self.top = CTCtopR(
+                    hidden,
+                    (arch_cfg.rnn_hidden_size, arch_cfg.rnn_layers),
+                    nclasses,
+                    rnn_type=arch_cfg.rnn_type,
+                    is_vit=True,
+                )
+
+        # ------------------------------------------------------------------
         # 3) TorchVision ViT path  (pretrained ViT from torchvision)
         # ------------------------------------------------------------------
         elif self.arch_type == "torchvision_vit":
@@ -1307,6 +1562,13 @@ class HTRNet(nn.Module):
             logits = self.top(seq_4d)                              # [T, B, nclasses]
             return logits
         
+        elif self.arch_type == "htrvt":
+            # HTR-VT backbone returns height-collapsed [Wp, B, D]
+            seq_tokens, reg_tokens, grid_size = self.backbone(x)
+            seq_4d = seq_tokens.permute(1, 2, 0).unsqueeze(2)      # [B, D, 1, T]
+            logits = self.top(seq_4d)
+            return logits
+        
         elif self.arch_type == "torchvision_vit":
             # TorchVision ViT backbone returns [T, B, D]
             seq_tokens, cls_token, grid_size = self.backbone(x)    # [T, B, D]
@@ -1340,6 +1602,12 @@ class HTRNet(nn.Module):
             seq_4d = seq_tokens.permute(1, 2, 0).unsqueeze(2)  # [B, D, 1, T]
             logits = self.top(seq_4d)  # [T, B, C]
 
+            return logits, reg_tokens, attn_maps, token_norms, grid
+        
+        elif self.arch_type == "htrvt":
+            seq_tokens, reg_tokens, attn_maps, token_norms, grid = self.backbone.forward_explain(x)
+            seq_4d = seq_tokens.permute(1, 2, 0).unsqueeze(2)  # [B, D, 1, T]
+            logits = self.top(seq_4d)  # [T, B, C]
             return logits, reg_tokens, attn_maps, token_norms, grid
         
         elif self.arch_type == "torchvision_vit":

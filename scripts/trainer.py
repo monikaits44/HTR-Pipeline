@@ -3,6 +3,7 @@ from omegaconf import OmegaConf
 
 import sys
 import os
+import random
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -13,9 +14,14 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 from utils.htr_dataset import HTRDataset
+from utils.finetuning import (
+    build_finetune_optimizer,
+    build_finetune_scheduler,
+    GradualUnfreezer,
+)
 
 from models import HTRNet
-from utils.transforms import aug_transforms_cnn, aug_transforms_vit, aug_transforms_vit_strong
+from utils.transforms import aug_transforms_cnn, aug_transforms_vit
 
 import torch.nn.functional as F
 
@@ -26,6 +32,16 @@ from datetime import datetime
 import csv
 import time
 import fcntl
+
+
+def set_seed(seed):
+    """Set all random seeds for reproducibility."""
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
 
 
 def get_next_run_number(experiments_dir):
@@ -130,6 +146,9 @@ class HTRTrainer(nn.Module):
         self.csv_file = csv_file
         self.csv_writer = csv_writer
         
+        # Fine-tuning: gradual unfreezer (set in prepare_optimizers if enabled)
+        self.unfreezer = None
+        
         # Create tqdm logger
         self.tqdm_logger = TqdmToLogFile(log_file) if log_file else None
         
@@ -143,6 +162,11 @@ class HTRTrainer(nn.Module):
         if experiment_dir is not None:
             self.attention_dir = os.path.join(experiment_dir, 'attention_weights')
             os.makedirs(self.attention_dir, exist_ok=True)
+
+        # SWA state (populated by prepare_optimizers when swa.enabled=true)
+        self.swa_model = None       # AveragedModel — holds the running weight average
+        self.swa_scheduler = None   # SWALR — drives LR during the SWA phase
+        self.swa_enabled = False    # mirror of config.swa.enabled for fast lookup
         
         # Setup detailed evaluation CSV file
         if experiment_dir is not None:
@@ -170,6 +194,22 @@ class HTRTrainer(nn.Module):
             self.log_file.write(message + '\n')
             self.log_file.flush()
 
+    def _read_character_classes(self, basefolder, subset):
+        """Read gt.txt and return set of unique characters.
+        
+        Used to compute unified character classes when training on synthetic data
+        but evaluating on IAM — ensures the model vocabulary covers all characters
+        from both domains.
+        """
+        chars = set()
+        gt_path = os.path.join(basefolder, subset, 'gt.txt')
+        with open(gt_path, 'r') as f:
+            for line in f:
+                parts = line.strip().split(' ')
+                if len(parts) >= 2:
+                    transcr = ' '.join(parts[1:])
+                    chars.update(list(transcr))
+        return chars
 
     def prepare_dataloaders(self):
 
@@ -201,6 +241,9 @@ class HTRTrainer(nn.Module):
             elif arch_type == 'vit_rgts':
                 selected_transforms = aug_transforms_vit
                 aug_name = 'vit (strong)'
+            elif arch_type == 'htrvt':
+                selected_transforms = aug_transforms_cnn
+                aug_name = 'cnn (moderate — HTR-VT has strong CNN stem + span-mask)'
             elif arch_type in ['torchvision_vit', 'trocr']:
                 selected_transforms = aug_transforms_cnn
                 aug_name = 'cnn (moderate — pretrained model)'
@@ -216,31 +259,107 @@ class HTRTrainer(nn.Module):
             elif aug_strategy == 'vit':
                 selected_transforms = aug_transforms_vit
                 aug_name = 'vit'
-            elif aug_strategy == 'vit_strong':
-                selected_transforms = aug_transforms_vit_strong
-                aug_name = 'vit_strong'
+            elif aug_strategy == 'vit_strong':  # removed — use 'vit' instead
+                selected_transforms = aug_transforms_vit
+                aug_name = 'vit (vit_strong alias)'
             else:
                 raise ValueError(f"Unknown augmentation strategy: {aug_strategy}")
             self.log(f"🎯 User-specified augmentation: {aug_name}")
         
         self.log(f"📊 Training with {aug_name} augmentation strategy")
-        
-        train_set = HTRDataset(dataset_folder, 'train', fixed_size=fixed_size, transforms=selected_transforms)
-        classes = train_set.character_classes
+
+        # ====================================================================
+        # DATA MODE: 'iam' (Aachen splits) or 'synthetic' (synth train + IAM test)
+        # ====================================================================
+        data_mode = getattr(config.data, 'mode', 'iam')
+
+        if data_mode == 'synthetic':
+            # ----------------------------------------------------------------
+            # SYNTHETIC MODE
+            # Train/Val: synthetic processed_lines (extracted from LMDB)
+            # Test:      IAM Aachen test split (always — the real benchmark)
+            # ----------------------------------------------------------------
+            synthetic_folder = getattr(config.data, 'synthetic_path', None)
+            if synthetic_folder is None:
+                raise ValueError(
+                    "data.synthetic_path must be set when data.mode='synthetic'. "
+                    "Add to config or CLI: data.synthetic_path=/path/to/synthetic_processed_lines"
+                )
+
+            self.log(f'📦 Data mode: SYNTHETIC PRETRAINING')
+            self.log(f'   Train/Val source: {synthetic_folder}')
+            self.log(f'   Test source (IAM Aachen): {dataset_folder}')
+
+            # Compute unified character classes: synthetic train ∪ IAM test
+            # Critical for CTC: model vocabulary must cover all characters it will
+            # encounter during both training AND evaluation.
+            synth_chars = self._read_character_classes(synthetic_folder, 'train')
+            iam_test_chars = self._read_character_classes(dataset_folder, 'test')
+            unified_classes = sorted(list(synth_chars | iam_test_chars))
+            self.log(f'   Synthetic train chars: {len(synth_chars)}')
+            self.log(f'   IAM test chars:        {len(iam_test_chars)}')
+            self.log(f'   Unified charset:       {len(unified_classes)} characters')
+
+            # Check for IAM-only characters (model will see them only at test time)
+            iam_only = iam_test_chars - synth_chars
+            if iam_only:
+                self.log(f'   ⚠️  Characters in IAM test but NOT in synthetic train: {sorted(iam_only)}')
+                self.log(f'      The model may struggle with these {len(iam_only)} unseen characters.')
+
+            train_set = HTRDataset(synthetic_folder, 'train', fixed_size=fixed_size,
+                                   transforms=selected_transforms, character_classes=unified_classes)
+            val_set = HTRDataset(synthetic_folder, 'val', fixed_size=fixed_size,
+                                 transforms=None, character_classes=unified_classes)
+            test_set = HTRDataset(dataset_folder, 'test', fixed_size=fixed_size,
+                                  transforms=None, character_classes=unified_classes)
+            classes = unified_classes
+            classes_save_dir = synthetic_folder
+
+            # Memory advisory for large synthetic datasets
+            est_mem_mb = len(train_set) * 200 / (1024 * 1024)  # ~200 bytes per data list entry
+            self.log(f'   ℹ️  Dataset index memory: ~{est_mem_mb:.0f} MB '
+                     f'(×{config.train.num_workers} DataLoader workers via fork)')
+            if len(train_set) > 500000 and config.train.num_workers > 4:
+                self.log(f'   ⚠️  Consider reducing num_workers to 4 for memory-constrained nodes')
+            iters_per_epoch = len(train_set) // config.train.batch_size
+            self.log(f'   ℹ️  ~{iters_per_epoch:,} iterations/epoch '
+                     f'(vs ~{6482 // config.train.batch_size} for IAM)')
+            self.log(f'   ℹ️  Consider fewer epochs (e.g. 5-15) for synthetic pretraining')
+
+        elif data_mode == 'iam':
+            # ----------------------------------------------------------------
+            # IAM MODE (default — backward compatible, unchanged behavior)
+            # All splits from IAM Aachen: train / val / test
+            # ----------------------------------------------------------------
+            self.log(f'📦 Data mode: IAM (Aachen splits)')
+
+            train_set = HTRDataset(dataset_folder, 'train', fixed_size=fixed_size, transforms=selected_transforms)
+            classes = train_set.character_classes
+
+            val_set = HTRDataset(dataset_folder, 'val', fixed_size=fixed_size, transforms=None)
+            test_set = HTRDataset(dataset_folder, 'test', fixed_size=fixed_size, transforms=None)
+            classes_save_dir = dataset_folder
+
+        else:
+            raise ValueError(
+                f"Unknown data.mode='{data_mode}'. Expected 'iam' or 'synthetic'."
+            )
+
+        # ====================================================================
+        # Common path: logging, DataLoaders, character dictionaries
+        # ====================================================================
         self.log('# training lines ' + str(train_set.__len__()))
         self.num_train_lines = train_set.__len__()
 
-        val_set = HTRDataset(dataset_folder, 'val', fixed_size=fixed_size, transforms=None)
         self.log('# validation lines ' + str(val_set.__len__()))
         self.num_val_lines = val_set.__len__()
 
-        test_set = HTRDataset(dataset_folder, 'test', fixed_size=fixed_size, transforms=None)
         self.log('# testing lines ' + str(test_set.__len__()))
         self.num_test_lines = test_set.__len__()
         self.charset_size = len(classes)
         self.log('charset size: ' + str(self.charset_size))
 
-        # augmentation using data sampler
+        # DataLoaders
         train_loader = DataLoader(train_set, batch_size=config.train.batch_size, 
                                   shuffle=True, num_workers=config.train.num_workers)
         if val_set is not None:
@@ -255,8 +374,8 @@ class HTRTrainer(nn.Module):
         classes += ' ' 
         classes = np.unique(classes)
 
-        # save classes in data folder
-        np.save(os.path.join(dataset_folder, 'classes.npy'), classes)
+        # save classes to the active data folder
+        np.save(os.path.join(classes_save_dir, 'classes.npy'), classes)
 
         # create dictionaries for character to index and index to character 
         # 0 index is reserved for CTC blank
@@ -392,32 +511,27 @@ class HTRTrainer(nn.Module):
             self.log(f'  warmup={warmup_epochs} epochs (start_factor=0.1) + cosine annealing')
         
         # ==================================================================
-        # TorchVision ViT (pretrained): DIFFERENTIAL learning rates
-        # Backbone (pretrained) gets very low LR to preserve features.
-        # Head (new, random) gets higher LR to learn CTC mapping.
+        # HTR-VT (CNN/ResNet stem + ViT + registers + span-mask, from scratch)
+        # 2-group differential LR: stem+transformer vs head. Warmup + cosine.
         # ==================================================================
-        elif arch_type == 'torchvision_vit':
-            backbone_lr = 2e-5   # Very low for pretrained backbone
-            head_lr = 5e-4       # Higher for new CTC head
-            backbone_wd = 0.01   # Standard for pretrained ViT fine-tuning
-            head_wd = 0.0001     # Lower for new head
+        elif arch_type == 'htrvt':
             warmup_epochs = 5
-            
-            # Separate parameters: backbone vs head + gray_to_rgb
-            backbone_params = list(self.net.backbone.vit.parameters())
+            backbone_lr = config.train.lr * 0.5     # 5e-4 for stem+transformer
+            head_lr = config.train.lr               # 1e-3 for the CTC head
+            backbone_wd = 0.005
+            head_wd = 0.0001
+
+            backbone_params = list(self.net.backbone.parameters())
             head_params = list(self.net.top.parameters())
-            adapter_params = list(self.net.backbone.gray_to_rgb.parameters())
-            
-            # Add register token params if present
-            if hasattr(self.net.backbone, 'register_tokens'):
-                adapter_params += [self.net.backbone.register_tokens]
-            
+
             optimizer = torch.optim.AdamW([
                 {'params': backbone_params, 'lr': backbone_lr, 'weight_decay': backbone_wd},
-                {'params': head_params + adapter_params, 'lr': head_lr, 'weight_decay': head_wd},
+                {'params': head_params, 'lr': head_lr, 'weight_decay': head_wd},
             ])
             self.optimizer = optimizer
-            
+            self.log(f'HTR-VT optimizer: backbone_lr={backbone_lr} (wd={backbone_wd}), '
+                     f'head_lr={head_lr} (wd={head_wd})')
+
             warmup_scheduler = torch.optim.lr_scheduler.LinearLR(
                 optimizer, start_factor=0.1, end_factor=1.0, total_iters=warmup_epochs
             )
@@ -428,53 +542,187 @@ class HTRTrainer(nn.Module):
                 optimizer, schedulers=[warmup_scheduler, cosine_scheduler],
                 milestones=[warmup_epochs]
             )
-            
-            self.log(f'TorchVision ViT optimizer: backbone_lr={backbone_lr}, head_lr={head_lr}, '
-                     f'backbone_wd={backbone_wd}, warmup={warmup_epochs} epochs')
+            self.log(f'  warmup={warmup_epochs} epochs (start_factor=0.1) + cosine annealing')
+
+        # ==================================================================
+        # TorchVision ViT (pretrained): DIFFERENTIAL learning rates
+        # Supports two modes:
+        #   1. finetune.enabled=True → LLRD + optional gradual unfreezing
+        #   2. Legacy mode → simple 2-group differential LR
+        # ==================================================================
+        elif arch_type == 'torchvision_vit':
+            finetune_enabled = (hasattr(config, 'finetune') and
+                                getattr(config.finetune, 'enabled', False))
+
+            if finetune_enabled:
+                # --- LLRD Fine-tuning Mode ---
+                optimizer = build_finetune_optimizer(self.net, arch_type, config)
+                self.optimizer = optimizer
+                self.scheduler = build_finetune_scheduler(optimizer, config, max_epochs)
+
+                # Gradual unfreezing
+                if getattr(config.finetune, 'gradual_unfreeze', False):
+                    warmup_frozen = getattr(config.finetune, 'unfreeze_warmup', 3)
+                    unfreeze_every = getattr(config.finetune, 'unfreeze_every', 3)
+                    self.unfreezer = GradualUnfreezer(
+                        self.net, arch_type,
+                        warmup_frozen=warmup_frozen,
+                        unfreeze_every=unfreeze_every
+                    )
+                    self.log(f'TorchVision ViT fine-tuning (LLRD + gradual unfreeze):')
+                    self.log(f'  base_lr={config.finetune.base_lr}, head_lr={config.finetune.head_lr}')
+                    self.log(f'  lr_decay_rate={config.finetune.lr_decay_rate}')
+                    self.log(f'  unfreeze_warmup={warmup_frozen}, unfreeze_every={unfreeze_every}')
+                else:
+                    self.log(f'TorchVision ViT fine-tuning (LLRD, no gradual unfreeze):')
+                    self.log(f'  base_lr={config.finetune.base_lr}, head_lr={config.finetune.head_lr}')
+                    self.log(f'  lr_decay_rate={config.finetune.lr_decay_rate}')
+            else:
+                # --- Legacy 2-group mode ---
+                backbone_lr = 2e-5
+                head_lr = 5e-4
+                backbone_wd = 0.01
+                head_wd = 0.0001
+                warmup_epochs = 5
+
+                backbone_params = list(self.net.backbone.vit.parameters())
+                head_params = list(self.net.top.parameters())
+                adapter_params = list(self.net.backbone.gray_to_rgb.parameters())
+
+                if hasattr(self.net.backbone, 'register_tokens'):
+                    adapter_params += [self.net.backbone.register_tokens]
+
+                optimizer = torch.optim.AdamW([
+                    {'params': backbone_params, 'lr': backbone_lr, 'weight_decay': backbone_wd},
+                    {'params': head_params + adapter_params, 'lr': head_lr, 'weight_decay': head_wd},
+                ])
+                self.optimizer = optimizer
+
+                warmup_scheduler = torch.optim.lr_scheduler.LinearLR(
+                    optimizer, start_factor=0.1, end_factor=1.0, total_iters=warmup_epochs
+                )
+                cosine_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+                    optimizer, T_max=max_epochs - warmup_epochs, eta_min=1e-6
+                )
+                self.scheduler = torch.optim.lr_scheduler.SequentialLR(
+                    optimizer, schedulers=[warmup_scheduler, cosine_scheduler],
+                    milestones=[warmup_epochs]
+                )
+
+                self.log(f'TorchVision ViT optimizer (legacy): backbone_lr={backbone_lr}, '
+                         f'head_lr={head_lr}, warmup={warmup_epochs} epochs')
         
         # ==================================================================
-        # TrOCR (pretrained, encoder frozen by default): Only train head
-        # If encoder is frozen, we only need optimizer for head params.
-        # If encoder is unfrozen, use differential LR like TorchVision ViT.
+        # TrOCR (pretrained): Supports three modes:
+        #   1. finetune.enabled=True → LLRD + gradual unfreezing (best)
+        #   2. freeze_encoder=True → Only train CTC head (fast, baseline)
+        #   3. freeze_encoder=False → Simple 2-group differential LR (legacy)
         # ==================================================================
         elif arch_type == 'trocr':
-            freeze_encoder = getattr(config.arch, 'freeze_encoder', True)
-            warmup_epochs = 5
-            
-            if freeze_encoder:
-                # Only head params are trainable
-                head_lr = 1e-4
-                head_wd = 0.0001
-                trainable_params = [p for p in self.net.parameters() if p.requires_grad]
-                optimizer = torch.optim.AdamW(trainable_params, lr=head_lr, weight_decay=head_wd)
-                self.log(f'TrOCR optimizer (encoder frozen): head_lr={head_lr}, head_wd={head_wd}')
+            finetune_enabled = (hasattr(config, 'finetune') and
+                                getattr(config.finetune, 'enabled', False))
+
+            if finetune_enabled:
+                # --- LLRD Fine-tuning Mode ---
+                optimizer = build_finetune_optimizer(self.net, arch_type, config)
+                self.optimizer = optimizer
+                self.scheduler = build_finetune_scheduler(optimizer, config, max_epochs)
+
+                if getattr(config.finetune, 'gradual_unfreeze', False):
+                    warmup_frozen = getattr(config.finetune, 'unfreeze_warmup', 5)
+                    unfreeze_every = getattr(config.finetune, 'unfreeze_every', 2)
+                    self.unfreezer = GradualUnfreezer(
+                        self.net, arch_type,
+                        warmup_frozen=warmup_frozen,
+                        unfreeze_every=unfreeze_every
+                    )
+                    self.log(f'TrOCR fine-tuning (LLRD + gradual unfreeze):')
+                    self.log(f'  base_lr={config.finetune.base_lr}, head_lr={config.finetune.head_lr}')
+                    self.log(f'  lr_decay_rate={config.finetune.lr_decay_rate}')
+                    self.log(f'  unfreeze_warmup={warmup_frozen}, unfreeze_every={unfreeze_every}')
+                else:
+                    self.log(f'TrOCR fine-tuning (LLRD, no gradual unfreeze):')
+                    self.log(f'  base_lr={config.finetune.base_lr}, head_lr={config.finetune.head_lr}')
+                    self.log(f'  lr_decay_rate={config.finetune.lr_decay_rate}')
             else:
-                # Differential LR: low for encoder, higher for head
-                encoder_lr = 3e-5
-                head_lr = 5e-4
-                encoder_params = list(self.net.backbone.encoder.parameters())
-                head_params = list(self.net.top.parameters()) + list(self.net.backbone.gray_to_rgb.parameters())
-                optimizer = torch.optim.AdamW([
-                    {'params': encoder_params, 'lr': encoder_lr, 'weight_decay': 0.01},
-                    {'params': head_params, 'lr': head_lr, 'weight_decay': 0.0001},
-                ])
-                self.log(f'TrOCR optimizer (encoder unfrozen): encoder_lr={encoder_lr}, head_lr={head_lr}')
-            
-            self.optimizer = optimizer
-            
-            warmup_scheduler = torch.optim.lr_scheduler.LinearLR(
-                optimizer, start_factor=0.1, end_factor=1.0, total_iters=warmup_epochs
-            )
-            cosine_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-                optimizer, T_max=max_epochs - warmup_epochs, eta_min=1e-6
-            )
-            self.scheduler = torch.optim.lr_scheduler.SequentialLR(
-                optimizer, schedulers=[warmup_scheduler, cosine_scheduler],
-                milestones=[warmup_epochs]
-            )
+                # --- Legacy modes ---
+                freeze_encoder = getattr(config.arch, 'freeze_encoder', True)
+                warmup_epochs = 5
+
+                if freeze_encoder:
+                    head_lr = 1e-4
+                    head_wd = 0.0001
+                    trainable_params = [p for p in self.net.parameters() if p.requires_grad]
+                    optimizer = torch.optim.AdamW(trainable_params, lr=head_lr, weight_decay=head_wd)
+                    self.log(f'TrOCR optimizer (encoder frozen): head_lr={head_lr}, head_wd={head_wd}')
+                else:
+                    encoder_lr = 3e-5
+                    head_lr = 5e-4
+                    encoder_params = list(self.net.backbone.encoder.parameters())
+                    head_params = list(self.net.top.parameters()) + list(self.net.backbone.gray_to_rgb.parameters())
+                    optimizer = torch.optim.AdamW([
+                        {'params': encoder_params, 'lr': encoder_lr, 'weight_decay': 0.01},
+                        {'params': head_params, 'lr': head_lr, 'weight_decay': 0.0001},
+                    ])
+                    self.log(f'TrOCR optimizer (encoder unfrozen): encoder_lr={encoder_lr}, head_lr={head_lr}')
+
+                self.optimizer = optimizer
+
+                warmup_scheduler = torch.optim.lr_scheduler.LinearLR(
+                    optimizer, start_factor=0.1, end_factor=1.0, total_iters=warmup_epochs
+                )
+                cosine_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+                    optimizer, T_max=max_epochs - warmup_epochs, eta_min=1e-6
+                )
+                self.scheduler = torch.optim.lr_scheduler.SequentialLR(
+                    optimizer, schedulers=[warmup_scheduler, cosine_scheduler],
+                    milestones=[warmup_epochs]
+                )
         
         else:
             raise ValueError(f"Unknown architecture type for optimizer: {arch_type}")
+
+        # ======================================================================
+        # SWA: Stochastic Weight Averaging (flag-gated)
+        # Activated when config.swa.enabled == True (default: false).
+        #
+        # What it does:
+        #   - Wraps self.net in an AveragedModel that maintains a running mean
+        #     of the weights across epochs.
+        #   - Replaces the current scheduler with SWALR starting at swa.start_epoch.
+        #   - After training, BatchNorm running statistics are recalibrated on the
+        #     training set (required because AveragedModel doesn't track BN stats).
+        #
+        # Design contract:
+        #   - self.swa_enabled:   used throughout train() / test() / save()
+        #   - self.swa_model:     evaluated instead of self.net in test() once active
+        #   - self.swa_scheduler: stepped instead of self.scheduler in the SWA phase
+        # ======================================================================
+        swa_cfg = getattr(config, 'swa', None)
+        self.swa_enabled = bool(getattr(swa_cfg, 'enabled', False)) if swa_cfg else False
+
+        if self.swa_enabled:
+            swa_start    = int(getattr(swa_cfg, 'start_epoch',    60))
+            anneal_ep    = int(getattr(swa_cfg, 'anneal_epochs',  10))
+            anneal_strat = str(getattr(swa_cfg, 'anneal_strategy', 'cos'))
+            swa_lr_val   = float(getattr(swa_cfg, 'swa_lr',       5e-4))
+
+            # AveragedModel stores the exponential moving average of net.parameters()
+            self.swa_model = torch.optim.swa_utils.AveragedModel(self.net)
+
+            # SWALR drives LR from its current value down to swa_lr over
+            # anneal_epochs, then holds it constant.
+            self.swa_scheduler = torch.optim.swa_utils.SWALR(
+                self.optimizer,
+                swa_lr=swa_lr_val,
+                anneal_epochs=anneal_ep,
+                anneal_strategy=anneal_strat,
+            )
+
+            self.log(
+                f'SWA enabled: start_epoch={swa_start}, swa_lr={swa_lr_val}, '
+                f'anneal_epochs={anneal_ep}, anneal_strategy={anneal_strat}'
+            )
 
     def decode(self, tdec, tdict, blank_id=0):
         
@@ -535,7 +783,7 @@ class HTRTrainer(nn.Module):
         # CNN-RNN uses accum_steps=1 (no accumulation, matches run_32 behavior).
         arch_type = getattr(config.arch, 'type', 'cnn_rnn')
         accum_steps = getattr(config.train, 'gradient_accumulation', 
-                              2 if arch_type in ['vit_rgts', 'torchvision_vit', 'trocr'] else 1)
+                              2 if arch_type in ['vit_rgts', 'htrvt', 'torchvision_vit', 'trocr'] else 1)
         effective_batch = config.train.batch_size * accum_steps
         if accum_steps > 1:
             self.log(f'Using gradient accumulation: {accum_steps} steps, effective batch size: {effective_batch}')
@@ -582,7 +830,7 @@ class HTRTrainer(nn.Module):
             if (iter_idx + 1) % accum_steps == 0 or (iter_idx + 1) == len(self.loaders['train']):
                 # Gradient clipping for ViT training stability only
                 # CNN-RNN does not need gradient clipping (matches run_32 behavior)
-                if arch_type in ['vit_rgts', 'torchvision_vit', 'trocr']:
+                if arch_type in ['vit_rgts', 'htrvt', 'torchvision_vit', 'trocr']:
                     torch.nn.utils.clip_grad_norm_(self.net.parameters(), max_norm=10.0)
                 
                 self.optimizer.step()
@@ -591,6 +839,25 @@ class HTRTrainer(nn.Module):
             t.set_postfix(values='loss : {:.2f}'.format(tloss_val))
 
         self.sample_decoding()
+
+        # SWA: update the averaged model after every epoch in the SWA phase.
+        # The caller is responsible for passing the current epoch so we can
+        # decide whether averaging should start. We do that in the main loop
+        # below; here we expose a helper that the main loop calls.
+
+    def swa_update(self, epoch):
+        """
+        Update AveragedModel weights for the current epoch (SWA phase only).
+        Called from the main training loop after htr_trainer.train(epoch).
+
+        Does nothing when SWA is disabled or before swa.start_epoch.
+        """
+        if not self.swa_enabled:
+            return
+        swa_start = int(getattr(getattr(self.config, 'swa', None), 'start_epoch', 60))
+        if epoch >= swa_start:
+            self.swa_model.update_parameters(self.net)
+            self.log(f'  [SWA] weights averaged at epoch {epoch}')
     
     def extract_attention_weights(self, epoch, dataset='val', num_samples=5):
         """Extract and save attention weights from ViT models during training."""
@@ -600,7 +867,7 @@ class HTRTrainer(nn.Module):
         
         # Only extract attention for ViT architectures
         arch_type = getattr(config.arch, 'type', 'cnn_rnn')
-        if arch_type not in ['vit_rgts', 'torchvision_vit', 'trocr']:
+        if arch_type not in ['vit_rgts', 'htrvt', 'torchvision_vit', 'trocr']:
             return  # Skip for CNN-RNN
         
         if self.attention_dir is None:
@@ -720,31 +987,78 @@ class HTRTrainer(nn.Module):
         self.log(f'  Layers: {metadata["num_layers"]}, Heads: {metadata["num_heads"]}, Samples: {metadata["num_samples"]}')
         
         self.net.train()
-    
-    def test(self, epoch, tset='test'):
 
+    def swa_finalize(self):
+        """
+        Recalibrate BatchNorm running statistics for the SWA-averaged model.
+
+        AveragedModel copies weights but does NOT track BatchNorm running_mean /
+        running_var during the averaging process. A single forward pass over the
+        training set is required to fix this before the SWA model can be evaluated.
+
+        Called once after the last training epoch (or at the end of the main loop).
+        Does nothing when SWA is disabled.
+        """
+        if not self.swa_enabled or self.swa_model is None:
+            return
+
+        self.log('  [SWA] Updating BatchNorm statistics (forward pass over train set)...')
+        swa_cfg = getattr(self.config, 'swa', None)
+        bn_steps = int(getattr(swa_cfg, 'update_bn_steps', 0)) if swa_cfg else 0
+
+        self.swa_model.eval()
+        device = self.config.device
+
+        # torch.optim.swa_utils.update_bn handles the BN forward passes.
+        # It expects an iterable that yields batches of *inputs only*.
+        # We wrap our train loader to strip the label from each tuple.
+        input_loader = (imgs.to(device) for imgs, _ in self.loaders['train'])
+        torch.optim.swa_utils.update_bn(input_loader, self.swa_model, device=device)
+
+        self.log('  [SWA] BatchNorm statistics updated.')
+
+    def test(self, epoch, tset='test', use_swa=None):
+        """
+        Evaluate on val or test split.
+
+        use_swa:
+          None  (default) — auto: use SWA model when swa_enabled AND swa_model is
+                            ready (i.e. swa.start_epoch has been reached).
+          True  — force evaluation on the SWA-averaged model.
+          False — force evaluation on the base model (self.net).
+        """
         config = self.config
         device = config.device
 
-        self.net.eval()
+        # Decide which model to evaluate.
+        swa_start = int(getattr(getattr(config, 'swa', None), 'start_epoch', 9999))
+        _auto_swa = (
+            self.swa_enabled
+            and self.swa_model is not None
+            and epoch >= swa_start
+        )
+        run_on_swa = _auto_swa if use_swa is None else bool(use_swa)
+        eval_model = self.swa_model if run_on_swa else self.net
+        eval_model.eval()
 
-        if tset=='test':
+        if tset == 'test':
             loader = self.loaders['test']
-        elif tset=='val':
+        elif tset == 'val':
             loader = self.loaders['val']
         else:
             print("not recognized set in test function")
 
-        self.log('####################### Evaluating {} set at epoch {} #######################'.format(tset, epoch))
-        
+        swa_tag = ' [SWA]' if run_on_swa else ''
+        self.log(f'####################### Evaluating {tset} set at epoch {epoch}{swa_tag} #######################')
+
         cer, wer = CER(), WER(mode=config.eval.wer_mode)
         sample_idx = 0
-        
+
         for (imgs, transcrs) in tqdm.tqdm(loader, file=self.tqdm_logger if self.tqdm_logger else None):
 
             imgs = imgs.to(device)
             with torch.no_grad():
-                o = self.net(imgs)
+                o = eval_model(imgs)
             # In eval mode, CTCtopB returns single tensor
             # But handle tuple case defensively
             if isinstance(o, tuple):
@@ -788,29 +1102,54 @@ class HTRTrainer(nn.Module):
         cer_score = cer.score()
         wer_score = wer.score()
 
-        self.log('CER at epoch {}: {:.3f}'.format(epoch, cer_score))
-        self.log('WER at epoch {}: {:.3f}'.format(epoch, wer_score))
+        self.log('CER at epoch {}{}: {:.3f}'.format(epoch, swa_tag, cer_score))
+        self.log('WER at epoch {}{}: {:.3f}'.format(epoch, swa_tag, wer_score))
 
+        # Restore training mode on the base model (SWA model stays in eval)
         self.net.train()
-        
+
         return cer_score, wer_score
 
     def save(self, epoch):
-        """Save model to experiment directory."""
+        """
+        Save model checkpoint(s) to the experiment directory.
+
+        Normal mode:  saves self.net weights as  model.pt
+        SWA mode:     saves self.net weights as  model.pt  (current base model)
+                      AND saves SWA-averaged weights as  model_swa.pt
+                      once swa.start_epoch has been reached.
+        """
         self.log('####################### Saving model at epoch {} #######################'.format(epoch))
-        
+
         if self.experiment_dir is None:
-            # Fallback to old behavior if no experiment directory is set
             if not os.path.exists('./saved_models'):
                 os.makedirs('./saved_models')
             save_path = './saved_models/htrnet_{}.pt'.format(epoch)
         else:
-            # Save to experiment directory as model.pt
             save_path = os.path.join(self.experiment_dir, 'model.pt')
-        
+
+        # Always save the base model
         torch.save(self.net.cpu().state_dict(), save_path)
         self.net.to(self.config.device)
         self.log(f'Model saved to: {save_path}')
+
+        # Also save the SWA-averaged model once averaging has started
+        if self.swa_enabled and self.swa_model is not None:
+            swa_start = int(getattr(getattr(self.config, 'swa', None), 'start_epoch', 9999))
+            if epoch >= swa_start:
+                swa_save_path = os.path.join(
+                    self.experiment_dir if self.experiment_dir else './saved_models',
+                    'model_swa.pt'
+                )
+                # AveragedModel wraps the original module; extract the plain state_dict
+                # from the underlying module so it can be loaded back into HTRNet directly.
+                swa_state = {
+                    k.replace('module.', ''): v.cpu()
+                    for k, v in self.swa_model.module.state_dict().items()
+                }
+                torch.save(swa_state, swa_save_path)
+                self.swa_model.to(self.config.device)
+                self.log(f'SWA model saved to: {swa_save_path}')
 
 
 def parse_args():
@@ -848,6 +1187,11 @@ if __name__ == '__main__':
     config = parse_args()
     max_epochs = config.train.num_epochs
 
+    # Set seed for reproducibility (default: 42)
+    seed_value = config.get('seed', 42)
+    if seed_value >= 0:
+        set_seed(seed_value)
+
     # Setup experiment directory structure
     experiment_dir, log_file, run_number, csv_file, csv_writer = setup_experiment_dir(config)
     
@@ -875,33 +1219,51 @@ if __name__ == '__main__':
     
     for epoch in range(1, max_epochs + 1):
 
+        # Gradual unfreezing step (if enabled)
+        if htr_trainer.unfreezer is not None:
+            n_unfrozen = htr_trainer.unfreezer.step(epoch)
+            if epoch <= 5 or epoch % 3 == 0:
+                htr_trainer.log(f'  [Unfreeze] epoch {epoch}: {n_unfrozen} backbone layers unfrozen')
+
         htr_trainer.train(epoch)
-        htr_trainer.scheduler.step()
+
+        # ── LR scheduler step ───────────────────────────────────────────────
+        # During the SWA phase (epoch >= swa.start_epoch) we switch from the
+        # base scheduler to SWALR.  Before that, we advance the base scheduler
+        # as usual.
+        swa_cfg = getattr(config, 'swa', None)
+        swa_start = int(getattr(swa_cfg, 'start_epoch', 9999)) if swa_cfg else 9999
+        if htr_trainer.swa_enabled and epoch >= swa_start:
+            # SWA phase: step SWALR + accumulate averaged weights
+            htr_trainer.swa_scheduler.step()
+            htr_trainer.swa_update(epoch)
+        else:
+            htr_trainer.scheduler.step()
 
         # save and evaluate the current model
         if epoch % config.train.save_every_k_epochs == 0:
             htr_trainer.save(epoch)
             val_cer, val_wer = htr_trainer.test(epoch, 'val')
             test_cer, test_wer = htr_trainer.test(epoch, 'test')
-            
+
             # Extract attention weights for ViT models every 5 epochs
             arch_type = getattr(config.arch, 'type', 'cnn_rnn')
             if arch_type in ['vit_rgts', 'torchvision_vit', 'trocr']:
-                if epoch % 5 == 0 or epoch == 1:  # Save at epoch 1, 5, 10, 15, 20, 25, 30
+                if epoch % 5 == 0 or epoch == 1:
                     htr_trainer.extract_attention_weights(epoch, dataset='val', num_samples=5)
-            
+
             # Track best model
             if val_cer < best_cer:
                 best_cer = val_cer
                 best_epoch = epoch
                 htr_trainer.log(f'\n*** New best CER: {best_cer:.3f} at epoch {best_epoch} ***\n')
-            
+
             # Write CSV row with all metrics
             epoch_time = time.time() - htr_trainer.epoch_start_time
             avg_train_loss = sum(htr_trainer.train_losses) / len(htr_trainer.train_losses) if htr_trainer.train_losses else 0.0
             current_lr = htr_trainer.optimizer.param_groups[0]['lr']
             seed_value = config.get('seed', -1)
-            
+
             csv_writer.writerow([
                 epoch,
                 current_lr,
@@ -923,32 +1285,54 @@ if __name__ == '__main__':
             ])
             csv_file.flush()
 
+    # ── Post-training SWA finalization ───────────────────────────────────────
+    # After all epochs, recalibrate BatchNorm stats for the averaged model and
+    # run a final evaluation so the SWA CER is captured in the log.
+    if htr_trainer.swa_enabled:
+        htr_trainer.log('\n' + '='*80)
+        htr_trainer.log('[SWA] Finalizing: recalibrating BatchNorm statistics...')
+        htr_trainer.swa_finalize()
+
+        htr_trainer.log('[SWA] Final evaluation of SWA model:')
+        swa_val_cer,  swa_val_wer  = htr_trainer.test(max_epochs, 'val',  use_swa=True)
+        swa_test_cer, swa_test_wer = htr_trainer.test(max_epochs, 'test', use_swa=True)
+        htr_trainer.log(f'[SWA] Val  CER: {swa_val_cer:.3f}  WER: {swa_val_wer:.3f}')
+        htr_trainer.log(f'[SWA] Test CER: {swa_test_cer:.3f}  WER: {swa_test_wer:.3f}')
+
+        if swa_val_cer < best_cer:
+            best_cer = swa_val_cer
+            best_epoch = max_epochs
+            htr_trainer.log(f'[SWA] New best CER: {best_cer:.3f} (SWA model)')
+        htr_trainer.log('='*80)
+
     # Save final summary
     htr_trainer.log("\n" + "="*80)
     htr_trainer.log("Training Completed!")
     htr_trainer.log(f"End Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     htr_trainer.log(f"Best Validation CER: {best_cer:.3f} at epoch {best_epoch}")
     htr_trainer.log(f"Final model saved to: {os.path.join(experiment_dir, 'model.pt')}")
+    if htr_trainer.swa_enabled:
+        htr_trainer.log(f"SWA model saved to:   {os.path.join(experiment_dir, 'model_swa.pt')}")
     htr_trainer.log("="*80)
-    
+
     # Log evaluation details path before closing files
     if htr_trainer.eval_csv_file:
         htr_trainer.log(f"Detailed evaluation saved to: {htr_trainer.eval_csv_path}")
-    
+
     # Print final summary before closing files
     log_print(f"\n{'='*80}")
     log_print(f"Experiment run_{run_number} completed!")
     log_print(f"Results saved in: {experiment_dir}")
     log_print(f"Detailed evaluation CSV: {os.path.join(experiment_dir, 'evaluation_details.csv')}")
     log_print(f"{'='*80}\n")
-    
+
     # Now close all files
     if log_file:
         log_file.close()
-    
+
     if csv_file:
         csv_file.close()
-    
+
     if htr_trainer.eval_csv_file:
         htr_trainer.eval_csv_file.close()
     # Final model is already saved into the experiment directory as `model.pt`.
