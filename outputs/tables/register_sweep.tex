@@ -1,0 +1,21 @@
+\begin{table}[t]
+\centering
+\caption{ViT-RGTS v2 register sweep on IAM (Aachen split). CER/WER at best validation epoch.}
+\label{tab:register_sweep}
+\begin{tabular}{rrcccc}
+\toprule
+Registers & SWA & Best Ep. & Val CER (\%) & Test CER (\%) & Test WER (\%) \\
+\midrule
+0 & -- & 142 & 3.96 & 5.74 & 18.87 \\
+0 & \checkmark & 124 & 4.11 & 5.90 & 19.12 \\
+2 & -- & 147 & 4.13 & 5.98 & 19.39 \\
+2 & \checkmark & 112 & 4.05 & 6.16 & 20.04 \\
+4 & -- & 142 & 3.88 & 5.55 & 18.26 \\
+4 & \checkmark & 138 & 3.97 & 5.77 & 19.05 \\
+8 & -- & 129 & 4.00 & 5.94 & 19.32 \\
+8 & \checkmark & 115 & 4.19 & 5.96 & 19.51 \\
+16 & -- & 146 & 4.08 & 5.88 & 19.13 \\
+16 & \checkmark & 120 & 4.12 & 5.88 & 19.25 \\
+\bottomrule
+\end{tabular}
+\end{table}

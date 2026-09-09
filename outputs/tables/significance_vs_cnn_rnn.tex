@@ -1,0 +1,23 @@
+\begin{table}[t]
+\centering
+\caption{Paired bootstrap significance test (10K resamples) against run\_{\,107} (CNN-RNN SWA). $\Delta$ CER = comparison $-$ reference.}
+\label{tab:significance}
+\begin{tabular}{lccccl}
+\toprule
+Model & CER (\%) & $\Delta$ CER & 95\% CI & $p$-value & Sig. \\
+\midrule
+CNN-RNN SWA (ref.) & 4.92 & -- & -- & -- & -- \\
+\midrule
+ViT-RGTS R2 & 6.17 & +1.25 & [+1.06, +1.44] & 0.0000 & $^{***}$ \\
+CNN-RNN & 5.06 & +0.14 & [+0.02, +0.26] & 0.0268 & $^{*}$ \\
+ViT-RGTS R0 & 6.11 & +1.19 & [+1.00, +1.38] & 0.0000 & $^{***}$ \\
+ViT-RGTS R4 & 6.30 & +1.38 & [+1.20, +1.58] & 0.0000 & $^{***}$ \\
+ViT-B/16 R0 & 12.40 & +7.48 & [+7.20, +7.76] & 0.0000 & $^{***}$ \\
+ViT-RGTS R16 & 6.14 & +1.23 & [+1.05, +1.41] & 0.0000 & $^{***}$ \\
+ViT-RGTS R8 & 5.98 & +1.07 & [+0.89, +1.25] & 0.0000 & $^{***}$ \\
+ViT-RGTS R4 120ep & 5.96 & +1.05 & [+0.86, +1.23] & 0.0000 & $^{***}$ \\
+HTR-VT R4 & 5.53 & +1.39 & [+0.78, +2.05] & 0.0000 & $^{***}$ \\
+\bottomrule
+\multicolumn{6}{l}{\footnotesize $^{*}p<0.05$, $^{**}p<0.01$, $^{***}p<0.001$} \\
+\end{tabular}
+\end{table}

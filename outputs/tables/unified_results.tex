@@ -1,0 +1,25 @@
+\begin{table}[t]
+\centering
+\caption{Unified comparison of all trained models on IAM (Aachen split). CER and WER reported at the best validation epoch.}
+\label{tab:results}
+\begin{tabular}{llrrrrr}
+\toprule
+Architecture & Registers & Params & Epoch & Val CER (\%) & Test CER (\%) & Test WER (\%) \\
+\midrule
+CNN-RNN & -- & 7.4M & 11 & 0.50 & 33.32 & 67.67 \\
+\midrule
+ViT-RGTS v2 & 0 & 9.5M & 2 & 0.78 & 30.31 & 62.54 \\
+ViT-RGTS v2 & 2 & 9.5M & 2 & 0.80 & 30.15 & 63.04 \\
+ViT-RGTS v2 & 4 & 9.5M & 2 & 0.83 & 31.42 & 65.35 \\
+ViT-RGTS v2 & 8 & 9.5M & 3 & 0.81 & 31.04 & 65.19 \\
+ViT-RGTS v2 & 16 & 9.5M & 2 & 0.81 & 30.97 & 64.48 \\
+\midrule
+TorchVision ViT & 0 & 91.9M & 2 & 4.53 & 46.68 & 78.20 \\
+TorchVision ViT & 4 & 91.9M & 149 & 12.18 & 15.09 & 38.19 \\
+\midrule
+TrOCR & -- & 90.4M & 148 & 9.98 & 12.38 & 32.60 \\
+\midrule
+htrvt & 4 & 8.8M & 76 & 5.49 & 4.82 & 20.58 \\
+\bottomrule
+\end{tabular}
+\end{table}

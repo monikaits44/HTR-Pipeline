@@ -1,0 +1,56 @@
+run,label,dataset,swa,registers,group,best_epoch,total_epochs,params_M,val_cer,test_cer,test_wer
+run_143,CNN-RNN,IAM,no,—,Baseline,108,150,7.36,3.33,4.89,16.47
+run_145,CNN-RNN,IAM,yes,—,Baseline+SWA,150,150,7.36,3.18,4.62,15.70
+run_144,ViT-RGTS v2,IAM,no,0,Register sweep,142,150,9.48,3.96,5.74,18.87
+run_147,ViT-RGTS v2,IAM,yes,0,Register sweep,124,150,9.48,4.11,5.90,19.12
+run_148,ViT-RGTS v2,IAM,no,2,Register sweep,147,150,9.48,4.13,5.98,19.39
+run_149,ViT-RGTS v2,IAM,yes,2,Register sweep,112,150,9.48,4.05,6.16,20.04
+run_146,ViT-RGTS v2,IAM,no,4,Register sweep,137,150,9.48,4.03,5.96,19.33
+run_150,ViT-RGTS v2,IAM,yes,4,Register sweep,138,150,9.48,3.97,5.77,19.05
+run_151,ViT-RGTS v2,IAM,no,8,Register sweep,129,150,9.48,4.00,5.94,19.32
+run_156,ViT-RGTS v2,IAM,yes,8,Register sweep,115,150,9.48,4.19,5.96,19.51
+run_152,ViT-RGTS v2,IAM,no,16,Register sweep,146,150,9.48,4.08,5.88,19.13
+run_172,ViT-RGTS v2,IAM,yes,16,Register sweep,120,150,9.48,4.12,5.88,19.25
+run_153,ViT-B/16,IAM,no,—,Pretrained,89,150,91.86,73.06,73.14,123.71
+run_173,ViT-B/16+SWA,IAM,yes,—,Pretrained,115,150,91.86,15.92,18.34,43.72
+run_174,ViT-B/16 FT,IAM,no,—,Pretrained,149,150,91.87,12.18,15.09,38.19
+run_177,ViT-B/16 FT+SWA,IAM,yes,—,Pretrained,147,150,91.87,13.08,15.65,40.09
+run_155,TrOCR frozen,IAM,no,—,Pretrained,126,150,3.72,71.64,71.98,99.39
+run_154,TrOCR frozen+SWA,IAM,yes,—,Pretrained,102,150,3.72,72.72,73.08,100.81
+run_178,TrOCR FT (LLRD),IAM,no,—,Pretrained,148,150,90.37,9.98,12.38,32.60
+run_180,TrOCR FT+SWA,IAM,yes,—,Pretrained,149,150,90.37,10.00,12.10,32.31
+run_157,ViT-RGTS v2 no stem,IAM,no,4,Ablation-arch,58,150,9.25,73.37,73.36,112.88
+run_158,ViT-RGTS v2 rnn-only,IAM,no,4,Ablation-arch,144,150,9.42,4.98,7.07,22.46
+run_159,ViT-RGTS v2 cnn-only,IAM,no,4,Ablation-arch,149,150,5.23,6.67,9.47,30.76
+run_160,ViT-RGTS v2 gru,IAM,no,4,Ablation-arch,140,150,8.43,4.81,7.13,23.21
+run_161,ViT-RGTS v2 vit-aug,IAM,no,4,Ablation-arch,145,150,9.48,4.38,6.30,20.37
+run_162,ViT-RGTS v2 d=4,IAM,no,4,Ablation-arch,133,150,7.90,3.91,5.93,19.30
+run_163,ViT-RGTS v2 d=8,IAM,no,4,Ablation-arch,145,150,5.47,4.07,5.93,19.25
+run_164,ViT-RGTS v2 dim128,IAM,no,4,Ablation-arch,149,150,6.32,4.52,6.80,22.46
+run_175,ViT-RGTS v2 dim512,IAM,no,4,Ablation-arch,145,150,11.06,4.07,5.79,19.00
+run_165,ViT-RGTS v2 rnn1,IAM,no,4,Ablation-arch,107,150,1.31,73.56,73.65,112.03
+run_167,ViT-RGTS v2 drop0.3,IAM,no,4,Ablation-arch,140,150,9.48,4.65,6.68,21.37
+run_176,SWA start=75,IAM,yes,4,Ablation-swa,78,150,9.48,4.38,6.37,20.70
+run_181,SWA start=135,IAM,yes,4,Ablation-swa,137,150,9.48,3.99,5.91,19.42
+run_168,Batch=16,IAM,no,4,Ablation-train,137,150,9.48,4.01,5.81,19.09
+run_182,ViT-B/16 gradual-FT,IAM,no,4,Ablation-train,143,150,91.87,65.76,66.20,93.30
+run_183,TrOCR gradual-FT,IAM,no,—,Ablation-train,146,150,90.37,11.47,13.69,35.98
+run_179,ViT-RGTS v1,IAM,no,4,Ablation-arch,129,150,36.69,4.60,6.57,20.85
+run_186,lr=5e-4,IAM,no,4,Ablation-train,115,150,9.48,4.09,5.92,19.25
+run_188,SWA lr=1e-3,IAM,yes,4,Ablation-swa,147,150,9.48,3.99,5.81,19.06
+run_169,SWA lr=1e-4,IAM,yes,4,Ablation-swa,142,150,9.48,3.88,5.55,18.26
+run_170,seed=123,IAM,no,4,Reproducibility,138,150,9.48,3.98,5.77,18.85
+run_171,seed=456,IAM,no,4,Reproducibility,139,150,9.48,3.96,5.84,19.09
+run_166,CNN-RNN,READ2016,no,—,Dataset-gen,126,150,7.37,4.41,4.06,18.29
+run_185,ViT-RGTS v2,READ2016,no,0,Dataset-gen,138,150,9.49,5.30,4.73,20.65
+run_184,ViT-RGTS v2,READ2016,no,4,Dataset-gen,144,150,9.49,5.21,4.82,20.93
+run_187,ViT-RGTS v2,READ2016,no,8,Dataset-gen,144,150,9.49,5.19,4.75,20.65
+run_190,ViT-RGTS v2,READ2016,no,16,Dataset-gen,131,150,9.50,5.25,4.78,20.77
+run_189,CNN-RNN,Synth→IAM,no,—,Synthetic,11,11,7.36,0.52,35.45,68.70
+run_191,CNN-RNN,Synth→IAM,yes,—,Synthetic,11,11,7.36,0.50,33.32,67.67
+run_192,ViT-RGTS v2,Synth→IAM,no,0,Synthetic,2,10,9.47,0.78,30.31,62.54
+run_195,ViT-RGTS v2,Synth→IAM,no,4,Synthetic,2,10,9.47,0.84,31.60,64.74
+run_198,ViT-RGTS v2,Synth→IAM,no,8,Synthetic,3,10,9.47,0.82,30.62,63.48
+run_199,ViT-RGTS v2,Synth→IAM,no,16,Synthetic,2,11,9.48,0.81,30.97,64.48
+run_202,ViT-B/16,Synth→IAM,no,—,Synthetic,2,2,91.86,4.58,46.03,78.02
+run_204,TrOCR,Synth→IAM,no,—,Synthetic,3,3,3.72,62.09,75.83,100.96

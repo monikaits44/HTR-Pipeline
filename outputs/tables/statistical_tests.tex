@@ -1,0 +1,19 @@
+\begin{table}[t]
+\centering
+\caption{Paired bootstrap significance test (10K resamples) against run\_{\,123} (ViT-RGTS R8). $\Delta$ CER = comparison $-$ reference.}
+\label{tab:significance}
+\begin{tabular}{lccccl}
+\toprule
+Model & CER (\%) & $\Delta$ CER & 95\% CI & $p$-value & Sig. \\
+\midrule
+ViT-RGTS R8 (ref.) & 5.98 & -- & -- & -- & -- \\
+\midrule
+ViT-RGTS R2 & 6.17 & +0.19 & [+0.05, +0.32] & 0.0080 & $^{**}$ \\
+ViT-RGTS R0 & 6.11 & +0.12 & [-0.02, +0.26] & 0.0878 & n.s. \\
+ViT-RGTS R4 & 6.30 & +0.32 & [+0.18, +0.46] & 0.0000 & $^{***}$ \\
+ViT-RGTS R16 & 6.14 & +0.16 & [+0.01, +0.30] & 0.0305 & $^{*}$ \\
+ViT-RGTS R4 120ep & 5.96 & -0.02 & [-0.17, +0.13] & 0.7610 & n.s. \\
+\bottomrule
+\multicolumn{6}{l}{\footnotesize $^{*}p<0.05$, $^{**}p<0.01$, $^{***}p<0.001$} \\
+\end{tabular}
+\end{table}

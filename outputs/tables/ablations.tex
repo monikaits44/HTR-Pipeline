@@ -1,0 +1,24 @@
+\begin{table}[t]
+\centering
+\caption{Ablation study for ViT-RGTS v2 with 4 registers on IAM.}
+\label{tab:ablations}
+\begin{tabular}{lrcccc}
+\toprule
+Variant & Params & Epochs & Val CER (\%) & Test CER (\%) & Test WER (\%) \\
+\midrule
+150 epochs & 9.5M & 150 & 3.88 & 5.55 & 18.26 \\
+Depth 8 & 11.1M & 150 & 4.07 & 5.79 & 19.00 \\
+120 epochs & 9.5M & 120 & 4.01 & 5.88 & 19.27 \\
+Dim 128 & 5.5M & 150 & 4.07 & 5.93 & 19.25 \\
+Depth 4 & 7.9M & 150 & 3.91 & 5.93 & 19.30 \\
+Baseline (4-reg) & 9.5M & 80 & 4.09 & 6.00 & 19.78 \\
+Dim 512 & 36.7M & 80 & 4.42 & 6.46 & 20.68 \\
+ViT augmentation & 9.5M & 80 & 4.58 & 6.50 & 20.89 \\
+1-layer BiLSTM & 6.3M & 150 & 4.52 & 6.80 & 22.46 \\
+RNN head only & 9.4M & 80 & 4.87 & 6.81 & 21.95 \\
+GRU head & 8.4M & 80 & 4.58 & 6.85 & 22.56 \\
+CNN head only & 5.2M & 150 & 6.67 & 9.47 & 30.76 \\
+No CNN stem & 9.2M & 80 & 72.49 & 72.44 & 125.66 \\
+\bottomrule
+\end{tabular}
+\end{table}
