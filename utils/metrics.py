@@ -1,7 +1,10 @@
 import editdistance
 
 import nltk
-nltk.download('punkt')
+try:
+    nltk.data.find('tokenizers/punkt')
+except LookupError:
+    nltk.download('punkt', quiet=True)
 from nltk.tokenize import word_tokenize
 
 # character error rate

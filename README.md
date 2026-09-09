@@ -4,434 +4,359 @@
 
 _Master's Project · Pattern Recognition Lab · Friedrich-Alexander-Universität Erlangen-Nürnberg_
 
-Author: **Monika Radhakisan Chavan**  ·  Supervisor: **Prof. Vincent Christlein**  ·  Report date: **10 September 2026**
+Author: **Monika Radhakisan Chavan** · Supervisor: **Prof. Vincent Christlein** · Report date: **10 September 2026**
+
+<p align="center">
+  <img src="outputs/beyond_memorization/curated/booklet_attention_preview.gif" alt="Beyond-Memorization reproduction — per-character cross-attention for the word ‘booklet’ (IAM writer 049 → 116)" width="520"/>
+</p>
+<p align="center">
+  <em>Per-character cross-attention rollout for the word <strong>booklet</strong>, produced from the Beyond-Memorization
+  (ICDAR 2025) reproduction that anchors this project's interpretability toolkit.</em>
+</p>
 
 ---
 
-## 1. Overview
+## 1 · Overview
 
-This repository accompanies a master's project that studies whether **register tokens** (Darcet _et al._, ICLR 2024) improve the **attention interpretability** of a Vision Transformer (ViT) used for **handwritten text recognition (HTR)** under **CTC** supervision, and whether they affect recognition accuracy at the scale of the IAM Handwriting Database.
+This repository accompanies a master's project that investigates whether
+**register tokens** (Darcet _et al._, ICLR 2024) improve the **attention
+interpretability** of a Vision Transformer used for **handwritten text
+recognition (HTR)** under **CTC** supervision, and whether they affect
+recognition accuracy at IAM scale.
 
-The project delivers:
-
-1. A **modular HTR training and evaluation framework** supporting four backbones — CNN-RNN, ViT-RGTS (v1/v2), TorchVision ViT-B/16, and TrOCR-base — and a specialised HTR-VT variant with a 2-D grid for the READ2016 corpus.
-2. A **63-experiment matrix** (IAM register sweep, architecture ablations, training-strategy ablations, READ2016 generalisation, synthetic pretraining) all executed on the same 150-epoch schedule and seed for a controlled comparison.
-3. An **attention-interpretability toolkit** (per-character CTC-aligned heatmaps, blob-thresholded overlays in the style of _Beyond Memorization_ (ICDAR 2025), rollout, GradCAM, register-token analysis, and quantitative attention-quality metrics).
-4. A **fully reproducible LaTeX report** ([`documents/final/pr_htr_report/main.pdf`](documents/final/pr_htr_report/main.pdf)) tied to the exact runs and figures in `outputs/`.
+The public code surface is deliberately **minimal**: it contains only the
+core model definition ([`models.py`](models.py)), the reusable
+utilities ([`utils/`](utils/)), the YAML configurations
+([`configs/`](configs/)), the synthetic-data generator
+([`synthetic_data_generation/`](synthetic_data_generation/)), one curated
+Jupyter notebook, and the small set of report-outline figures/tables under
+[`outputs/`](outputs/). Everything else — the SLURM launchers, per-run
+analysis notes, raw checkpoints, exploratory notebooks, third-party clones
+(_Beyond-Memorization_, WordStylist, TrOCR/ViT weights), and the LaTeX
+report source — is preserved on the author's workspace under `archive/` /
+`documents/` / `experiments_execution/` / `scripts/` / `saved_models/` but
+**is not published to GitHub** (see `.gitignore`).
 
 ---
 
-## 2. Key claims
-
-| # | Claim | Evidence |
-|---|-------|----------|
-| **A** | Register count is **CER-neutral** for CTC-ViT on IAM within seed noise (± 0.10 pp). | §5 tables below and [`documents/final/KEY_FINDINGS_AND_OBSERVATIONS.md`](documents/final/KEY_FINDINGS_AND_OBSERVATIONS.md) §1. |
-| **B** | Registers **improve attention quality** on 3 of 4 metrics (entropy, sparsity/Gini, cross-character overlap). A residual "sink" pattern survives on patch tokens because CTC self-attention lacks a CLS-style query. | [`outputs/pub_figures/fig3_register_quantitative.png`](outputs/pub_figures/fig3_register_quantitative.png), §5 F4/F5. |
-| **C** | SWA reliably reduces CER by 0.2–0.4 pp when the base run has already converged; it **hurts** runs that never converged. | §6 SWA analysis. |
-| **D** | For fine-tuning a pretrained ImageNet ViT-B/16 on IAM, a **~25× differential LR** (backbone 2e-5, head 5e-4) drops test CER from 75.7 % → 15.1 % vs. naïve uniform LR. | Run 153 vs. 174 in §6. |
-
----
-
-## 3. Repository layout
+## 2 · Repository layout (published surface)
 
 ```
 HTR-Pipeline/
-├── models.py                      # HTRNet wrapper — 4 backbones, 3 CTC heads
-├── configs/                       # YAML configs for every architecture / experiment
-├── scripts/
-│   ├── trainer.py                 # Main training loop (all architectures, SWA, seeded)
-│   ├── preprocessing/             # IAM / READ2016 dataset preparation
-│   ├── postprocessing/            # Evaluation, attention viz, aggregation, tables
-│   │   ├── single_model/          # Per-run demo, evaluate, feature extraction
-│   │   ├── comparative/           # Cross-run comparisons
-│   │   └── attention_viz/         # Rollout, layerwise, head-specialisation, concentration
-│   ├── visualization/             # GradCAM + attention rollout primitives
-│   ├── writer_identification/     # VLAC feature extraction + retrieval pipeline
-│   └── pub_fig{1..5}_*.py         # Camera-ready figure generators
-├── utils/                         # Dataset, metrics, transforms, attention extractor
-├── synthetic_data_generation/     # 7-step pipeline: fonts → CC100 text → LMDB rendering
-├── experiments_execution/         # SLURM launch harness (modular per-experiment scripts)
-│   ├── slurm_modular/             # Active — one launcher per experiment
-│   └── run_experiment.sh          # Single sourced entry point
-├── evaluation_execution/          # Batch evaluation + final-results generation
-├── external/                      # Third-party repos (Beyond-Memorization) — git-ignored
-├── documents/final/               # Analysis notes + LaTeX report + figures
-│   └── pr_htr_report/             # Report source; compiled main.pdf
-├── docs/README.md                 # Index of authoritative documentation
-├── notebook/                      # Curated Jupyter notebooks (attention exploration)
-├── outputs/                       # Generated figures/tables (git-ignored)
-├── saved_models/experiments/      # Per-run checkpoints (git-ignored)
-├── logs/                          # SLURM logs (git-ignored)
-├── data/                          # IAM / READ2016 (git-ignored — download separately)
-├── archive/                       # Historical scripts / notebooks (git-ignored, preserved locally)
-├── FINAL_EXPERIMENTS.md           # Canonical experiment reference
-├── requirements.txt               # Pinned Python dependencies
-├── CITATION.cff                   # How to cite this work
-├── LICENSE                        # MIT
-└── README.md                      # This file
+├── README.md                         ← this file
+├── LICENSE                           ← MIT + attribution
+├── CITATION.cff                      ← software-citation metadata
+├── COMMIT_GUIDE.md                   ← step-by-step publication workflow
+├── requirements.txt                  ← pinned Python dependencies
+├── .gitignore                        ← publication profile
+│
+├── models.py                         ← HTRNet wrapper — all backbones & heads
+├── configs/                          ← YAML configs for every architecture
+├── utils/                            ← dataset, transforms, metrics, attention
+├── synthetic_data_generation/        ← 7-step fonts → CC100 → LMDB pipeline
+│
+├── notebook/
+│   └── beyond_memorization_attention_maps.ipynb
+│                                     ← curated interactive workflow
+│
+└── outputs/                          ← report-outline figures & tables only
+    ├── beyond_memorization/curated/
+    │     └── booklet_attention_preview.gif   ← README hero animation
+    ├── pub_figures/                  ← 5 camera-ready report figures
+    └── tables/                       ← unified CSV + LaTeX result tables
 ```
 
-**Publication policy.** Datasets, checkpoints, generated outputs, logs, and the workspace-local `archive/` and `external/` folders are excluded from Git via `.gitignore`. Nothing has been deleted — everything historical is preserved under `archive/` on the author's workspace.
+`archive/` (workspace-only, git-ignored) mirrors every historical script,
+notebook, checkpoint, and analysis note so nothing has been permanently
+deleted. Its structure is documented in
+[`archive/README.md`](archive/README.md) locally.
 
 ---
 
-## 4. Setup
+## 3 · Key claims
 
-### 4.1 Requirements
+| # | Claim | Evidence |
+|---|-------|----------|
+| **A** | Register count is **CER-neutral** for CTC-ViT on IAM within seed noise (± 0.10 pp). | §4 quantitative table + [`outputs/tables/register_sweep.tex`](outputs/tables/register_sweep.tex) |
+| **B** | Registers **improve attention quality** on 3 of 4 metrics (entropy, sparsity/Gini, cross-character overlap). A residual "sink" pattern survives on patch tokens because CTC self-attention lacks a CLS-style query. | [`outputs/pub_figures/fig3_register_quantitative.png`](outputs/pub_figures/fig3_register_quantitative.png) |
+| **C** | SWA reliably reduces CER by 0.2–0.4 pp when the base run has already converged; it **hurts** runs that never converged. | §4 SWA-vs-no-SWA row deltas |
+| **D** | For fine-tuning a pretrained ImageNet ViT-B/16 on IAM, a **~25 × differential LR** (backbone 2e-5, head 5e-4) drops test CER from 75.7 % → 15.1 % vs. naïve uniform LR. | §4 architecture-comparison table |
+| **E** | The **Beyond-Memorization** (ICDAR 2025) per-character attention methodology reproduces on CTC-supervised recognisers, giving a common visualisation grammar across generative and discriminative HTR pipelines. | Booklet GIF above + [`archive/beyond_memorization_reproduction/`](archive/beyond_memorization_reproduction/) (workspace only) |
 
-- Linux (tested on Debian-based HPC nodes), NVIDIA GPU with ≥ 12 GB VRAM (RTX 3080 in the reference environment).
-- Python 3.9, CUDA 12.4 driver (PyTorch build `2.6.0+cu124`).
-- ~15 GB free disk for IAM and processed splits, ~500 GB if all 63 experiments will be re-run and stored.
-- LaTeX (`pdflatex` + `bibtex`) if you want to rebuild the report.
+---
 
-### 4.2 Environment
+## 4 · Main quantitative results
+
+All numbers are on the IAM test split (Aachen split, 2 915 lines) at
+150 epochs with `seed = 42`. "True SWA CER" is the `[SWA] Test CER`
+logged by the post-training averaged-model evaluation — the non-averaged
+live-network CER in `results.csv` is not comparable for SWA runs.
+
+### 4.1 Register sweep — ViT-RGTS v2 on IAM  _(Claim A)_
+
+| Registers | No-SWA CER | No-SWA WER | **True SWA CER** | **True SWA WER** |
+|:---------:|-----------:|-----------:|-----------------:|-----------------:|
+|  0 | 5.74 % | 18.87 % | 5.70 % | 18.80 % |
+|  2 | 5.98 % | 19.39 % | 5.70 % | 18.70 % |
+|  4 | 5.96 % | 19.33 % | 5.70 % | 18.70 % |
+|  8 | 5.94 % | 19.32 % | **5.60 %** | **18.60 %** |
+| 16 | 5.88 % | 19.13 % | 5.70 % | 18.70 % |
+
+Spread with SWA = **0.10 pp** — below the empirical seed-variance floor
+(§4.4). Register count therefore does **not** drive CER at IAM scale.
+
+### 4.2 Architecture comparison _(Claims C, D)_
+
+| Architecture | Strategy | Test CER | Test WER | Parameters |
+|--------------|----------|--------:|--------:|-----------:|
+| **CNN-RNN** (baseline)     | + SWA                       | **4.50 %** | **15.30 %** |  7.36 M |
+| CNN-RNN                    | no SWA                      | 4.89 % | 16.47 % |  7.36 M |
+| **ViT-RGTS v2** (4 reg)    | + SWA                       | 5.70 % | 18.70 % |  9.48 M |
+| ViT-RGTS v2 (4 reg)        | no SWA                      | 5.96 % | 19.33 % |  9.48 M |
+| TrOCR-base                 | LLRD FT + SWA               | 12.10 % | 32.20 % | 90.4 M |
+| TrOCR-base                 | LLRD FT (no SWA)            | 12.38 % | 32.60 % | 90.4 M |
+| ViT-B/16 (ImageNet)        | 2-group LR FT               | 15.09 % | 38.19 % | 91.9 M |
+| ViT-B/16 (ImageNet)        | 2-group LR FT + SWA         | 15.70 % | 39.90 % | 91.9 M |
+| TrOCR-base                 | frozen encoder              | 71.98 % | ≈ 100 % |  3.72 M |
+| ViT-B/16 (ImageNet)        | naïve uniform LR = 1e-3     | 73.14 % | ≈ 100 % | 91.9 M |
+
+### 4.3 Architecture ablations _(baseline = ViT-RGTS v2, 4 reg, no SWA = 5.96 % CER)_
+
+| Ablation | Test CER | Δ vs baseline |
+|----------|--------:|--------------:|
+| LR = 5e-4 (halved)          | **5.55 %** | **− 0.42 pp** |
+| Depth = 8                   | 5.79 % | − 0.18 pp |
+| Batch = 16 (no accum)       | 5.81 % | − 0.15 pp |
+| Depth = 4                   | 6.06 % | + 0.10 pp |
+| Dim = 512                   | 6.11 % | + 0.15 pp |
+| SWA start = epoch 75        | 6.37 % | + 0.41 pp |
+| Dropout = 0.3               | 6.42 % | + 0.46 pp |
+| ViT-friendly augmentation   | 6.63 % | + 0.67 pp |
+| CNN-head only (no BiLSTM)   | 6.71 % | + 0.75 pp |
+| RNN 1-layer                 | 6.80 % | + 0.84 pp |
+| Dim = 128                   | 6.98 % | + 1.02 pp |
+| No CNN stem                 | 8.04 % | + 2.08 pp |
+| ViT-RGTS v1 legacy          | 73.65 % | + 67.7 pp _(catastrophic)_ |
+
+Load-bearing components: **CNN stem**, **BiLSTM head**, moderate width
+(dim ≈ 256–512).
+
+### 4.4 Cross-dataset generalisation & seed reproducibility
+
+| Model | Dataset | Split | CER | WER | Notes |
+|-------|---------|-------|----:|----:|-------|
+| HTR-VT (R = 4)              | READ2016 | test | **4.82 %** | **20.58 %** | 80 ep, 8.75 M params |
+| ViT-RGTS v2 (4 reg, seed 42)  | IAM | test | 5.96 % | 19.33 % | reference |
+| ViT-RGTS v2 (4 reg, seed 123) | IAM | test | 5.98 % | 19.28 % | Δ = + 0.02 pp |
+| ViT-RGTS v2 (4 reg, seed 456) | IAM | test | 5.90 % | 19.15 % | Δ = − 0.06 pp |
+
+Empirical seed noise **≈ ± 0.10 pp** CER — establishing the significance
+threshold used above.
+
+Machine-readable versions of every table are in
+[`outputs/tables/`](outputs/tables/) (`unified_results.csv`,
+`architecture_comparison.tex`, `register_sweep.tex`,
+`ablations.tex`, `significance_register_sweep.tex`,
+`significance_vs_cnn_rnn.tex`, `statistical_tests.tex`).
+
+---
+
+## 5 · Main qualitative results
+
+### 5.1 Per-character attention on Beyond-Memorization outputs — Claim E
+
+The animation at the top of this README shows the per-character
+cross-attention rollout produced by the Beyond-Memorization (ICDAR 2025)
+generator on the IAM word **booklet** (writer 049 style transferred to
+writer 116, `charLocation = 0`). Each frame highlights a single target
+character (b → o → o → k → l → e → t) and demonstrates that a
+training-free style swap yields **localised, character-consistent
+attention maps**. The same visualisation grammar transfers to the
+CTC-supervised HTR-VT recogniser (see report §5.2, Figure F9b).
+
+Regenerate from the workspace-local frames:
 
 ```bash
-# Clone
+python scripts/postprocessing/make_booklet_gif.py
+# → outputs/beyond_memorization/curated/booklet_attention_preview.gif
+```
+
+The seven source PNGs and the generator script are preserved in
+`archive/beyond_memorization_reproduction/` on the author's workspace.
+
+### 5.2 Register-effect self-attention — Claim B
+
+<p align="center">
+  <img src="outputs/pub_figures/fig5_register_comparison_attn_talks.png" alt="Register-sweep CTC self-attention on the IAM sample ‘talks.’" width="720"/>
+</p>
+
+CTC-query self-attention on the IAM sample **talks.** across four
+register counts (0 / 2 / 4 / 8, top → bottom, shared colormap). The
+0-register run shows broad "sink" bands filling the attention map; adding
+registers narrows the peaks and separates neighbouring characters. The
+residual sink structure that survives at R = 8 motivates the argument in
+report §5.3 that CTC self-attention lacks a CLS-style query to fully
+absorb global structure.
+
+### 5.3 Register-effect — quantitative attention metrics
+
+<p align="center">
+  <img src="outputs/pub_figures/fig3_register_quantitative.png" alt="Attention-quality metrics as a function of register count" width="720"/>
+</p>
+
+Four attention-quality metrics from
+[`utils/attention_metrics.py`](utils/attention_metrics.py) evaluated on the
+same runs used in §4.1. Three metrics (entropy ↓, Gini sparsity ↑,
+cross-character overlap ↓) improve monotonically with register count;
+peak-sharpness plateaus. Direct evidence for Claim B.
+
+### 5.4 CTC posterior — defines the "peak column" vocabulary
+
+<p align="center">
+  <img src="outputs/pub_figures/ctc_posterior.png" alt="CTC posterior for the sample ‘talks.’ with per-character peak columns" width="720"/>
+</p>
+
+Companion figure to §5.2/§5.3: the CTC posterior over the input columns
+(character × time-step heatmap, red lines mark each character's
+peak-column t_c). This is the coordinate system used to align every
+attention overlay in §5 and the report.
+
+---
+
+## 6 · Setup
+
+### 6.1 Requirements
+
+- Linux, NVIDIA GPU ≥ 12 GB VRAM (reference: RTX 3080).
+- Python 3.9, CUDA 12.4-compatible PyTorch (`2.6.0+cu124`).
+- ≈ 15 GB disk for IAM after preprocessing; `saved_models/experiments/`
+  can reach several hundred GB if all 63 experiments are re-run.
+- `pdflatex` + `bibtex` if you want to rebuild the report — the source
+  and the compiled PDF live in the workspace-only
+  `documents/final/pr_htr_report/` folder and are not published.
+
+### 6.2 Environment
+
+```bash
 git clone https://github.com/monikaits44/HTR-Pipeline.git
 cd HTR-Pipeline
 
-# Virtual environment (recommended)
 python3.9 -m venv .venv
 source .venv/bin/activate
-
-# Pinned dependencies (see requirements.txt)
 pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-### 4.3 Datasets
+### 6.3 Data preparation (IAM + READ2016)
 
-The IAM Handwriting Database is not redistributable — you must
-[register](https://fki.tic.heia-fr.ch/register) and download the following
-archives from the [official website](https://fki.tic.heia-fr.ch/databases/download-the-iam-handwriting-database):
-
-- `formsA-D.tgz`, `formsE-H.tgz`, `formsI-Z.tgz` → unzip into one folder (`$IAM/forms/`).
-- `xml.tgz` → unzip into `$IAM/xml/`.
-
-Then generate the line-level splits used throughout this project:
+The IAM Handwriting Database and READ2016 corpora are not redistributable.
+Register at <https://fki.tic.heia-fr.ch/register>, download the form and
+XML archives, then:
 
 ```bash
+# IAM line-level splits (Aachen)
 python scripts/preprocessing/prepare_iam.py \
-    $IAM/forms/ $IAM/xml/ \
-    ./data/IAM/splits/ ./data/IAM/processed_lines/
-```
+    $IAM/forms/ $IAM/xml/ ./data/IAM/splits/ ./data/IAM/processed_lines/
 
-For the READ2016 experiments:
-
-```bash
+# READ2016
 python scripts/prepare_read2016.py --output data/READ2016/processed
 ```
 
-### 4.4 Pretrained weights (optional)
-
-Only needed for the pretrained-fine-tune runs and the _Beyond-Memorization_ reproduction:
-
-```bash
-python asset/download_pretrained_models.py
-```
-
-### 4.5 Configuration for a new machine
-
-The SLURM launchers under `experiments_execution/slurm_modular/` embed absolute paths in
-their `#SBATCH --output=...` and `--chdir=...` directives (SLURM cannot resolve
-relative paths). To adapt them to another site:
-
-```bash
-grep -rl '/home/hpc/iwi5/iwi5369h/HTR-Pipeline' \
-     experiments_execution/ evaluation_execution/ \
-  | xargs sed -i "s|/home/hpc/iwi5/iwi5369h/HTR-Pipeline|$PWD|g"
-```
-
-`run_experiment.sh` and both scripts in `evaluation_execution/` already derive
-`PROJECT_ROOT` from their own location, so they need no edits for a local run.
+`scripts/`, `data/`, `experiments_execution/`, `evaluation_execution/`,
+and `saved_models/` live in the workspace but are excluded from the
+published repository (see `.gitignore`). Clone the author's private
+extension of this repo if you need the full training / evaluation
+harness.
 
 ---
 
-## 5. Results
+## 7 · Training & evaluation (workspace-only)
 
-All numbers are on the IAM test split (Aachen split, 2 915 lines) at
-150 epochs with `seed=42` unless stated. "True SWA CER" = `[SWA] Test CER`
-logged by the post-training averaged-model evaluation in `training.log`
-(the non-averaged live-network CER in `results.csv` is not comparable and
-should be ignored for SWA runs; see [`documents/final/KEY_FINDINGS_AND_OBSERVATIONS.md`](documents/final/KEY_FINDINGS_AND_OBSERVATIONS.md) §0.2).
-
-### 5.1 Main result — Register sweep on IAM (ViT-RGTS v2)
-
-| Registers | No-SWA CER | No-SWA WER | **True SWA CER** | **True SWA WER** |
-|:---------:|-----------:|-----------:|-----------------:|-----------------:|
-|  0  | 5.74 % | 18.87 % | 5.70 % | 18.80 % |
-|  2  | 5.98 % | 19.39 % | 5.70 % | 18.70 % |
-|  4  | 5.96 % | 19.33 % | 5.70 % | 18.70 % |
-|  8  | 5.94 % | 19.32 % | **5.60 %** | **18.60 %** |
-| 16 | 5.88 % | 19.13 % | 5.70 % | 18.70 % |
-
-_Spread with SWA is 0.10 pp — below the seed-variance floor established in §5.5._
-_Register count therefore does not drive CER at IAM scale (Claim A)._
-
-### 5.2 Architecture comparison (IAM test, best epoch)
-
-| Architecture | Strategy | Test CER | Test WER | Parameters |
-|--------------|----------|--------:|--------:|-----------:|
-| **CNN-RNN** (baseline) | + SWA | **4.50 %** | **15.30 %** | 7.36 M |
-| CNN-RNN | no SWA | 4.89 % | 16.47 % | 7.36 M |
-| **ViT-RGTS v2** (4 reg) | + SWA | 5.70 % | 18.70 % | 9.48 M |
-| ViT-RGTS v2 (4 reg) | no SWA | 5.96 % | 19.33 % | 9.48 M |
-| TrOCR-base | LLRD FT + SWA | 12.10 % | 32.20 % | 90.4 M |
-| TrOCR-base | LLRD FT (no SWA) | 12.38 % | 32.60 % | 90.4 M |
-| ViT-B/16 (ImageNet) | 2-group LR FT | 15.09 % | 38.19 % | 91.9 M |
-| ViT-B/16 (ImageNet) | 2-group LR FT + SWA | 15.70 % | 39.90 % | 91.9 M |
-| TrOCR-base | frozen encoder | 71.98 % | ≈ 100 % | 3.72 M |
-| ViT-B/16 (ImageNet) | naïve uniform LR = 1e-3 | 73.14 % | ≈ 100 % | 91.9 M |
-
-CNN-RNN wins because the IAM training set (6 482 lines) is too small
-for a from-scratch Transformer to catch up with the CNN's built-in
-sequence-locality prior within 150 epochs — a textbook small-data regime
-result. ViT-RGTS v2 nevertheless comes within 1.2 pp of the purpose-built
-CNN and, unlike CNN-RNN, provides an interpretable attention signal.
-
-### 5.3 Architecture ablations (baseline = ViT-RGTS v2, 4 reg, no SWA = 5.96 % CER)
-
-| Ablation | Test CER | Δ vs baseline |
-|----------|--------:|--------------:|
-| LR = 5e-4 (halved)         | **5.55 %** | **− 0.42 pp** (improvement) |
-| Depth = 8 (deeper)         | 5.79 % | − 0.18 pp |
-| SWA LR = 1e-4              | 5.81 % | − 0.15 pp |
-| Batch = 16 (no accum)      | 5.81 % | − 0.15 pp |
-| SWA start = epoch 135      | 5.91 % | − 0.05 pp |
-| SWA LR = 1e-3              | 5.92 % | − 0.04 pp |
-| Depth = 4 (shallower)      | 6.06 % | + 0.10 pp |
-| Dim = 512 (wider)          | 6.11 % | + 0.15 pp |
-| SWA start = epoch 75       | 6.37 % | + 0.41 pp |
-| Dropout = 0.3              | 6.42 % | + 0.46 pp |
-| ViT-friendly augmentation  | 6.63 % | + 0.67 pp |
-| CNN-head only (no BiLSTM)  | 6.71 % | + 0.75 pp |
-| RNN 1-layer only           | 6.80 % | + 0.84 pp |
-| Dim = 128 (narrower)       | 6.98 % | + 1.02 pp |
-| No CNN stem                | 8.04 % | + 2.08 pp |
-| ViT-RGTS v1 legacy         | 73.65 % | + 67.7 pp (catastrophic) |
-
-Load-bearing components: **CNN stem**, **BiLSTM head**, moderate width (dim = 256 – 512).
-
-### 5.4 READ2016 (HTR-VT, R = 4)
-
-| Model | Split | CER | WER | Notes |
-|-------|-------|----:|----:|-------|
-| HTR-VT (this repo) | test | **4.82 %** | **20.58 %** | run 142, 80 ep, 8.75 M params |
-
-Best result of the whole matrix on a completely different script (historical
-German), demonstrating that the register-augmented ViT recipe **transfers
-across datasets** without retuning.
-
-### 5.5 Seed reproducibility (ViT-RGTS v2, 4 reg, no SWA)
-
-| Seed | Test CER | Test WER |
-|:----:|--------:|--------:|
-| 42 (default) | 5.96 % | 19.33 % |
-| 123 | 5.98 % | 19.28 % |
-| 456 | 5.90 % | 19.15 % |
-
-Empirical seed noise ≈ ± 0.10 pp CER — establishing the significance
-threshold for all sweep results above.
-
-Full result tables, per-run mechanistic explanations, and every ablation are
-in [`documents/final/KEY_FINDINGS_AND_OBSERVATIONS.md`](documents/final/KEY_FINDINGS_AND_OBSERVATIONS.md).
-
----
-
-## 6. Training
-
-### 6.1 Single experiment
+The public repo only ships the model definition, utilities and configs.
+The full training / evaluation harness lives under `experiments_execution/`
+(SLURM launchers), `scripts/trainer.py`, and `evaluation_execution/`
+(batch evaluation + aggregate result generation). These directories are
+intentionally excluded from GitHub via `.gitignore`; the workflow they
+implement is:
 
 ```bash
-# From the repo root, with .venv activated:
-python scripts/trainer.py configs/config.yaml configs/baseline_vit_rgts_v2.yaml \
-    arch.num_registers=4 train.num_epochs=150 seed=42
-```
-
-Anything defined in a YAML can be overridden as `key.subkey=value` on the
-command line (OmegaConf semantics).
-
-### 6.2 SLURM (recommended for full experiments)
-
-```bash
-# One experiment
+# Single experiment (workspace-only)
 sbatch experiments_execution/slurm_modular/iam/07_vit_rgts_v2_4reg.slurm
 
-# All 20 IAM experiments
-bash  experiments_execution/slurm_modular/submit_all_iam.sh
-
-# All 22 ablations
-bash  experiments_execution/slurm_modular/submit_all_ablations.sh
-
-# All 5 READ2016 experiments
-bash  experiments_execution/slurm_modular/submit_all_read2016.sh
-
-# All 16 synthetic experiments
-bash  experiments_execution/slurm_modular/submit_all_synthetic.sh
-
-# The complete 63-experiment matrix
+# Full 63-experiment matrix
 bash  experiments_execution/slurm_modular/submit_all.sh
-```
 
-Each run creates `saved_models/experiments/run_<N>/` containing
-`model.pt`, `model_swa.pt` (when SWA is on), `config.json`, `results.csv`,
-`training.log`, and `evaluation_details.csv`.
-
-### 6.3 Configuration reference
-
-| Config | Architecture | Purpose |
-|--------|-------------|---------|
-| `configs/config.yaml` | Global defaults | seed = 42, lr = 1e-3, epochs = 150, batch = 8 |
-| `configs/baseline.yaml` | CNN-RNN (dual head) | Best-performing baseline |
-| `configs/baseline_vit_rgts_v2.yaml` | ViT-RGTS v2 (**recommended**) | CNN stem + 6-layer transformer + registers |
-| `configs/baseline_vit_rgts.yaml` | ViT-RGTS v1 (legacy) | Kept for ablations only |
-| `configs/torchvision_vit.yaml` | TorchVision ViT-B/16 | ImageNet-pretrained backbone |
-| `configs/trocr.yaml` | TrOCR-base | HuggingFace pretrained |
-| `configs/finetune_torchvision_vit.yaml` | ViT-B/16 FT | 2-group differential LR |
-| `configs/finetune_trocr.yaml` | TrOCR FT | LLRD + gradual unfreeze |
-| `configs/htrvt_read2016_r4.yaml` | HTR-VT | ResNet stem + 2-D grid on READ2016 |
-| `configs/beyond_memorization.yaml` | Beyond-Memorization | External-repo integration |
-
----
-
-## 7. Evaluation
-
-```bash
-# Evaluate a single completed run
-RUN_ID=107 sbatch evaluation_execution/model_evaluation.sh
-
-# Evaluate every completed run in saved_models/experiments/
+# Batch evaluate every completed run
 bash evaluation_execution/batch_evaluate.sh
 
-# Aggregate all runs into a single CSV + LaTeX tables + comparison plots
+# Regenerate outputs/tables/ + outputs/pub_figures/
 bash evaluation_execution/generate_final_results.sh
 ```
 
-Metrics reported:
-
-- **CER** — character error rate (edit distance / #chars, in %)
-- **WER** — word error rate using an NLTK tokeniser (so IAM ASCII "no-space-before-punctuation" is handled consistently across datasets)
-
-Numerical results and per-sample predictions are written to
-`outputs/tables/` and `outputs/report_figures/`.
+Contact the author or open a private issue if you need access to the
+end-to-end pipeline.
 
 ---
 
-## 8. Interpretability: attention analysis
+## 8 · Configurations
 
-The ViT-RGTS backbone exposes a `forward_explain()` method that returns:
-
-- `seq_tokens`: `[T, B, D]` — the sequence fed to the CTC head.
-- `reg_tokens`: `[B, R, D]` — the register-token embeddings.
-- `attn_maps`:  `list[L]` of `[B, H, S, S]` — attention weights per layer.
-- `token_norms`: `[B, S]` — L2 norm per token (used for sink-detection).
-
-Ready-to-run visualisation scripts:
-
-```bash
-# Camera-ready per-character CTC-aligned attention (Beyond-Memorization style)
-python scripts/pub_fig1_paper_fig5.py --run <RUN_ID> --image <PATH.png>
-
-# Register-count comparison grid (Fig. 4 in the report)
-python scripts/pub_fig2_register_comparison.py
-
-# Register-effect quantitative bar charts (Fig. 5)
-python scripts/pub_register_quantitative.py
-
-# GradCAM + quantitative saliency
-python scripts/pub_fig3_gradcam_quantitative.py
-
-# Blob-thresholded per-character attention (ICDAR 2025 reproduction)
-python scripts/postprocessing/beyond_memorization_viz.py --run <RUN_ID>
-
-# HTR-VT (READ2016) BM-style overlays
-python scripts/htrvt_bm_attention.py
-```
-
-Attention-quality metrics (`utils/attention_metrics.py`): entropy, sparsity
-(Gini), peak sharpness, character-localisation accuracy, cross-character
-overlap. See [`documents/final/FINAL_ANALYSIS_REPORT.md`](documents/final/FINAL_ANALYSIS_REPORT.md) §12 for the full postprocessing pipeline.
+| Config | Architecture | Purpose |
+|--------|-------------|---------|
+| [`configs/config.yaml`](configs/config.yaml) | Global defaults | seed 42, lr 1e-3, epochs 150, batch 8 |
+| [`configs/baseline.yaml`](configs/baseline.yaml) | CNN-RNN (dual head) | Best-performing baseline |
+| [`configs/baseline_vit_rgts_v2.yaml`](configs/baseline_vit_rgts_v2.yaml) | ViT-RGTS v2 (**recommended**) | CNN stem + 6-layer transformer + registers |
+| [`configs/baseline_vit_rgts.yaml`](configs/baseline_vit_rgts.yaml) | ViT-RGTS v1 (legacy) | Kept for ablations only |
+| [`configs/torchvision_vit.yaml`](configs/torchvision_vit.yaml) | TorchVision ViT-B/16 | ImageNet-pretrained backbone |
+| [`configs/trocr.yaml`](configs/trocr.yaml) | TrOCR-base | HuggingFace pretrained |
+| [`configs/finetune_torchvision_vit.yaml`](configs/finetune_torchvision_vit.yaml) | ViT-B/16 FT | 2-group differential LR |
+| [`configs/finetune_trocr.yaml`](configs/finetune_trocr.yaml) | TrOCR FT | LLRD + gradual unfreeze |
+| [`configs/htrvt_read2016_r4.yaml`](configs/htrvt_read2016_r4.yaml) | HTR-VT | ResNet stem + 2-D grid on READ2016 |
+| [`configs/beyond_memorization.yaml`](configs/beyond_memorization.yaml) | Beyond-Memorization | External-repo integration |
 
 ---
 
-## 9. Writer identification (downstream application)
+## 9 · Reproducibility
 
-The `scripts/writer_identification/` package reuses the register-token
-embeddings of a trained ViT-RGTS model for writer retrieval on IAM:
-
-```bash
-python scripts/writer_identification/evaluate.py --run <RUN_ID>
-python scripts/writer_identification/visualize.py --run <RUN_ID>
-```
-
-Outputs: VLAC-encoded writer embeddings, retrieval top-k accuracy,
-t-SNE visualisation.
-
----
-
-## 10. Report
-
-The full master's-project report is compiled at
-[`documents/final/pr_htr_report/main.pdf`](documents/final/pr_htr_report/main.pdf).
-
-```bash
-cd documents/final/pr_htr_report
-pdflatex -interaction=nonstopmode main.tex
-bibtex   main
-pdflatex -interaction=nonstopmode main.tex
-pdflatex -interaction=nonstopmode main.tex
-```
-
-The report is 17 pages (dated **10 September 2026**) and uses the figures in
-[`outputs/pub_figures/`](outputs/pub_figures/) — regenerable from checkpoints
-via the scripts in §8.
+- **Seed** — `seed = 42` in [`configs/config.yaml`](configs/config.yaml);
+  `set_seed()` propagates it to Python `random`, NumPy, PyTorch CPU/CUDA,
+  and sets `torch.backends.cudnn.deterministic = True`.
+- **Software** — exact versions pinned in
+  [`requirements.txt`](requirements.txt) (PyTorch 2.6.0 + cu124, timm 1.0.21,
+  transformers 4.57.3, albumentations 2.0.8, editdistance 0.8.1, …).
+- **Hardware reference** — NHR@FAU HPC cluster, SLURM `rtx3080`
+  partition, one GPU per run.
+- **Per-run artefacts** — every workspace run persists
+  `config.json` (frozen configuration), `model.pt` / `model_swa.pt`,
+  `results.csv`, `evaluation_details.csv`, and `training.log` so any run
+  can be re-evaluated identically.
 
 ---
 
-## 11. Reproducibility
+## 10 · Related work
 
-- **Seed**: `seed=42` set in `configs/config.yaml`; also propagated via
-  `set_seed()` in `scripts/trainer.py` (Python `random`, NumPy, PyTorch CPU,
-  PyTorch CUDA, `torch.backends.cudnn.deterministic=True`).
-- **Software**: exact versions in `requirements.txt` (PyTorch 2.6.0 + cu124,
-  timm 1.0.21, transformers 4.57.3, albumentations 2.0.8, …).
-- **Hardware reference**: SLURM `rtx3080` partition, single GPU per run.
-- **Run artefacts**: every run keeps `config.json` (frozen config) alongside
-  the checkpoint, so any run can be re-evaluated exactly.
-- **Canonical reference matrix**: [`FINAL_EXPERIMENTS.md`](FINAL_EXPERIMENTS.md) enumerates all
-  63 experiments and their expected outputs.
-
----
-
-## 12. Related work
-
-- **Retsinas et al., "Best Practices for a Handwritten Text Recognition system"**,
-  DAS 2022 — the CNN-RNN baseline and dual-head CTC design used here derive
-  from this paper. The original upstream README is retained at
-  [`archive/legacy_documents/README.upstream_das2022.md`](archive/legacy_documents/README.upstream_das2022.md).
-- **Darcet et al., "Vision Transformers Need Registers"**, ICLR 2024 — the
-  register-token mechanism ablated in this project.
-- **"Beyond Memorization: Training-Free Style Mixing for Handwriting
-  Generation"**, ICDAR 2025 — the per-character blob-thresholded
-  visualisation methodology reproduced in
-  `scripts/postprocessing/beyond_memorization_viz.py`. The official repo is
-  cloned to `external/Beyond-Memorization/`; see
-  `configs/beyond_memorization.yaml`.
-- **Izmailov et al., "Averaging Weights Leads to Wider Optima…"**, UAI 2018
-  — the SWA procedure used in the 150-epoch schedule.
-- **Howard & Ruder, "ULMFiT"**, ACL 2018 — motivation for the LLRD and
+- **Retsinas et al.**, "Best Practices for a Handwritten Text Recognition
+  system", DAS 2022 — the CNN-RNN baseline and dual-head CTC design.
+- **Darcet et al.**, "Vision Transformers Need Registers", ICLR 2024 —
+  the register-token mechanism ablated in this project.
+- **Gurav et al.**, "Beyond Memorization: Training-Free Style Mixing for
+  Handwriting Generation", ICDAR 2025 — the per-character blob-thresholded
+  visualisation methodology reproduced in §5.1 (booklet GIF).
+- **Nikolaidou et al.**, "WordStylist: Styled Verbatim Handwritten Text
+  Generation with Latent Diffusion Models", ICDAR 2023 — the generator
+  backbone used inside the Beyond-Memorization reproduction.
+- **Izmailov et al.**, "Averaging Weights Leads to Wider Optima…", UAI
+  2018 — the SWA procedure used in the 150-epoch schedule.
+- **Howard & Ruder**, "ULMFiT", ACL 2018 — motivation for the LLRD and
   2-group differential-LR strategies used for pretrained-backbone
   fine-tuning.
-- **HTR-VT** — the ResNet-stem + 2-D-grid ViT variant, adapted for READ2016
-  in `configs/htrvt_read2016_r4.yaml`.
+- **Li et al.**, "HTR-VT", 2024 — the ResNet-stem + 2-D-grid ViT variant
+  adapted for READ2016.
 
 ---
 
-## 13. Citation
+## 11 · Citation
 
-If you use this repository, please cite via the metadata in
-[`CITATION.cff`](CITATION.cff) or with the following BibTeX entry:
+Please cite via the metadata in [`CITATION.cff`](CITATION.cff) or:
 
 ```bibtex
 @mastersthesis{Chavan2026HTRRegister,
@@ -446,24 +371,23 @@ If you use this repository, please cite via the metadata in
 }
 ```
 
-Please also cite the upstream works listed in §12 (particularly Retsinas
+Please also cite the upstream works listed in §10 (particularly Retsinas
 _et al._ 2022 and Darcet _et al._ 2024) when using the corresponding
 components.
 
 ---
 
-## 14. License
+## 12 · License
 
-Released under the [MIT License](LICENSE). Portions of the code build on
-upstream works retained under their respective licenses (see [`LICENSE`](LICENSE)
-for the full attribution list).
+Released under the [MIT License](LICENSE) with attribution to the upstream
+works listed in §10.
 
 ---
 
-## 15. Acknowledgements
+## 13 · Acknowledgements
 
 This work was carried out at the Pattern Recognition Lab, FAU
 Erlangen-Nürnberg, under the supervision of **Prof. Vincent Christlein**.
 Compute was provided by the NHR@FAU HPC cluster. The IAM Handwriting
-Database is © 2015–present RVL group, University of Bern / IAM. READ2016 is
-released by the READ project.
+Database is © 2015–present RVL group, University of Bern / IAM.
+READ2016 is released by the READ project.
