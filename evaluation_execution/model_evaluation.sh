@@ -5,8 +5,15 @@
 #SBATCH --gres=gpu:1
 #SBATCH --partition=rtx3080
 #SBATCH --chdir=/home/hpc/iwi5/iwi5369h/HTR-Pipeline
-#SBATCH --output=evaluation_execution/logs/eval_run54_%j.log
-#SBATCH --error=evaluation_execution/logs/eval_run54_%j.log
+#SBATCH --output=evaluation_execution/logs/eval_%j.log
+#SBATCH --error=evaluation_execution/logs/eval_%j.log
+
+# ── Configuration ───────────────────────────────────────────────────────────
+# Override these via environment or command-line:
+#   RUN_ID=107 CONFIG_OVERRIDES="arch.num_registers=0" sbatch model_evaluation.sh
+RUN_ID="${RUN_ID:-107}"
+EVAL_CONFIGS="${EVAL_CONFIGS:-configs/config.yaml configs/baseline.yaml}"
+CONFIG_OVERRIDES="${CONFIG_OVERRIDES:-}"
 
 # ── create log directory if needed ──────────────────────────────────────────
 mkdir -p evaluation_execution/logs
@@ -37,15 +44,15 @@ echo ""
 
 # ── Run evaluation ────────────────────────────────────────────────────────────
 echo "================================================================================"
-echo "Starting Evaluation: run_54  (ViT-RGTS v2, 16 registers)"
+echo "Starting Evaluation: run_${RUN_ID}"
 echo "Start Time: $(date)"
 echo "================================================================================"
 echo ""
 
-python -u scripts/postprocessing/evaluate.py \
-    configs/config.yaml configs/baseline.yaml configs/baseline_vit_rgts_v2.yaml \
-    arch.num_registers=16 \
-    resume=saved_models/experiments/run_54/model.pt
+python -u scripts/postprocessing/single_model/evaluate.py \
+    ${EVAL_CONFIGS} \
+    ${CONFIG_OVERRIDES} \
+    resume=saved_models/experiments/run_${RUN_ID}/model.pt
 
 EXIT_CODE=$?
 
