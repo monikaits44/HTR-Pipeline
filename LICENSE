@@ -1,0 +1,35 @@
+MIT License
+
+Copyright (c) 2026 Monika Radhakisan Chavan
+Pattern Recognition Lab, Friedrich-Alexander-Universität Erlangen-Nürnberg
+
+Portions of this repository build upon the following works, retained under
+their respective licenses:
+
+  • Retsinas et al., "Best Practices for a Handwritten Text Recognition
+    system" (DAS 2022) — reference implementation of the CNN-RNN baseline
+    was used as a starting point.
+  • Darcet et al., "Vision Transformers Need Registers" (ICLR 2024) — the
+    register-token mechanism is adapted for the CTC sequence-labelling
+    setting used here.
+  • Beyond-Memorization: Training-Free Style Mixing for Handwriting
+    Generation (ICDAR 2025) — the official reference implementation is
+    cloned separately (see external/) under its own license.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to
+deal in the Software without restriction, including without limitation the
+rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
+sell copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+DEALINGS IN THE SOFTWARE.

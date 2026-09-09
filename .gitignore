@@ -1,30 +1,118 @@
-# requirements
-requirements.txt
-# prepared data
-data/*
-# actual data
-datasets/IAM/
-# compiled python files
-utils/__pycache__/
+# =============================================================================
+# HTR-Pipeline .gitignore
+# =============================================================================
+# Repository policy:
+#   • Source code, configs, SLURM launchers, docs, small figures  → TRACKED
+#   • Datasets, checkpoints, generated outputs, logs, caches      → IGNORED
+#   • Anything historically valuable but no longer active         → moved to
+#     archive/ and IGNORED (kept locally, not published to GitHub)
+# =============================================================================
+
+# ---- Python ------------------------------------------------------------------
 __pycache__/
-# trained models
-saved_models/htrnet.pt
-saved_models/classes.npy
-# training experiment artifacts - log , config and checkpoints
-saved_models/experiments/*
-# virtual environment
+*.py[cod]
+*.egg-info/
+*.egg
+.eggs/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+build/
+dist/
+pip-wheel-metadata/
+
+# ---- Virtual environments ----------------------------------------------------
 .venv/
-# experiments
-attention_visualizations_test/*
-plots/
-problem statement/*
-notebook/sample_images/*
-example project/*
-asset/pretrained_models/*
-notebook/*
-documents/*
-output/*
-backup/*
-experiments_execution/logs/*
-visualizations/*
-.gitignore
+venv/
+env/
+.env
+.envrc
+
+# ---- Jupyter -----------------------------------------------------------------
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# ---- IDE / editors -----------------------------------------------------------
+.vscode/
+.idea/
+*.swp
+*.swo
+*.swn
+.DS_Store
+Thumbs.db
+
+# ---- LaTeX build artefacts ---------------------------------------------------
+*.aux
+*.log
+*.out
+*.toc
+*.lof
+*.lot
+*.bbl
+*.blg
+*.synctex.gz
+*.fdb_latexmk
+*.fls
+*.nav
+*.snm
+*.vrb
+# Keep the final PDF report tracked:
+!documents/final/pr_htr_report/main.pdf
+
+# ---- Datasets (must be downloaded separately) --------------------------------
+data/
+!data/.gitkeep
+datasets/
+
+# ---- Model checkpoints & experiment artefacts (large binary) -----------------
+saved_models/
+!saved_models/.gitkeep
+asset/pretrained_models/
+!asset/pretrained_models/.gitkeep
+
+# ---- Generated outputs (figures, attention maps, tables) ---------------------
+# Regenerable from checkpoints + scripts; not tracked in Git.
+outputs/
+!outputs/.gitkeep
+
+# ---- Training / evaluation / SLURM logs --------------------------------------
+logs/
+!logs/.gitkeep
+experiments_execution/logs/
+evaluation_execution/logs/
+slurm-*.out
+slurm-*.err
+
+# ---- Synthetic data outputs --------------------------------------------------
+synthetic_data_generation/synthesized_images/
+synthetic_data_generation/*.lmdb
+synthetic_data_generation/*/data.mdb
+synthetic_data_generation/*/lock.mdb
+
+# ---- External submodules / third-party repos --------------------------------
+# The Beyond-Memorization official repo is cloned locally for reproduction; keep
+# it out of Git and let users clone it themselves per README instructions.
+external/
+
+# ---- Archive (kept locally, not published) -----------------------------------
+archive/
+
+# ---- Secrets / credentials ---------------------------------------------------
+*.pem
+*.key
+*.env.local
+secrets/
+credentials/
+.aws/
+.ssh/
+
+# ---- Miscellaneous transient files -------------------------------------------
+*.tmp
+*.bak
+*.old
+*.orig
+*~
+core
+core.*

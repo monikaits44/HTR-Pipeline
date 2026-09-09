@@ -1,0 +1,58 @@
+cff-version: 1.2.0
+message: >-
+  If you use this repository, please cite it using the metadata below.
+title: >-
+  HTR-Pipeline: Improving HTR Attention Maps with Register Tokens
+  — A CTC Vision Transformer for Interpretable Handwritten Text Recognition
+authors:
+  - family-names: Chavan
+    given-names: Monika Radhakisan
+    affiliation: >-
+      Pattern Recognition Lab, Friedrich-Alexander-Universität
+      Erlangen-Nürnberg
+type: software
+license: MIT
+repository-code: "https://github.com/monikaits44/HTR-Pipeline"
+version: "1.0.0"
+date-released: "2026-09-10"
+keywords:
+  - handwritten text recognition
+  - vision transformer
+  - register tokens
+  - CTC
+  - attention interpretability
+  - IAM database
+  - READ2016
+references:
+  - type: article
+    authors:
+      - family-names: Retsinas
+        given-names: George
+      - family-names: Sfikas
+        given-names: Giorgos
+      - family-names: Gatos
+        given-names: Basilis
+      - family-names: Nikou
+        given-names: Christophoros
+    title: Best Practices for a Handwritten Text Recognition system
+    conference:
+      name: >-
+        15th IAPR International Workshop on Document Analysis Systems (DAS)
+    year: 2022
+    url: "https://arxiv.org/abs/2404.11339"
+  - type: conference-paper
+    authors:
+      - family-names: Darcet
+        given-names: Timothée
+      - family-names: Oquab
+        given-names: Maxime
+      - family-names: Mairal
+        given-names: Julien
+      - family-names: Bojanowski
+        given-names: Piotr
+    title: "Vision Transformers Need Registers"
+    conference:
+      name: >-
+        International Conference on Learning Representations (ICLR)
+    year: 2024
+    url: "https://arxiv.org/abs/2309.16588"
