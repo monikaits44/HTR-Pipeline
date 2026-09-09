@@ -1,0 +1,28 @@
+\section{Conclusion and Future Work}
+\label{sec:conclusion}
+
+This report set out to answer a question posed in the project's opening emails: does the register-token intervention of Darcet~\etal, originally proposed for classification Vision Transformers, transfer to a CTC-based Handwritten Text Recognition system, and does it produce attention maps that are ``fine-grained and meaningful'' enough to support downstream tasks such as writer identification?
+
+The answer, after $63$ training experiments across IAM and READ2016, is qualified. The recognition half of Darcet's claim transfers cleanly: within a seed-noise floor of $\pm 0.08$~pp, character error rate on IAM is flat across register counts $R \in \{0, 2, 4, 8, 16\}$, and the same near-flat pattern reproduces on READ2016 within $0.09$~pp. Register tokens do not hurt recognition. The interpretability half transfers partially: register-added ViTs show measurably lower character-attention entropy, better spatial ordering, and more heads aligned to left-to-right reading order, but a residual sink pattern intrinsic to CTC self-attention survives and requires an additional query-side mechanism to fully suppress. The visualization style of Nikolaidou~\etal~\cite{nikolaidou2024beyondmem} was reproduced end-to-end from our model: Fig.~\ref{fig:bm_booklet} shows the attention peak shifting from character to character along the word ``booklet'' using the same visualization recipe as the reference implementation. The best absolute recognizer on IAM is the compact CNN--RNN baseline with SWA at $4.62\%$~CER; the best interpretable recognizer is ViT-RGTS~v2 with $R = 4$ registers at $5.55\%$~CER --- a $0.93$~pp CER cost for the interpretability the register mechanism was chosen to deliver.
+
+Two ablations produce order-of-magnitude effects and are worth stating outside the main results: removing the CNN stem (or falling back to a row-major patch layout, as the legacy v1 architecture did) collapses CER from $\sim\!6\%$ to $\sim\!73\%$, isolating the strictly-left-to-right token-formation step as the single load-bearing design decision for a CTC ViT HTR encoder. This is the design constraint that separates a working from a non-working system, and it applies to any architectural variant of the same family (including HTR-VT-style plain-ViT encoders that use adaptive max-pooling in place of a CNN stem).
+
+\subsection{Immediate Extensions}
+
+Four extensions follow directly from the results of this report and are laid out in more detail in the Supplementary document.
+
+\paragraph{Writer identification via VLAC over register-token features.}
+The Souibgui~\etal~\cite{souibgui2022vlac} pipeline aggregates character-indexed local descriptors into per-page writer representations. Feeding ViT-RGTS~v2 attention-indexed patch features (at the CTC decoding column of each character) into a VLAC aggregator is a direct realization of the ``downstream task'' motivation from the problem statement, and the R = 4 model's cleaner attention maps make it the natural feature extractor for this pipeline. This is the single most valuable follow-up.
+
+\paragraph{CLS-augmented CTC ViT to close the residual sink gap.}
+The residual sink pattern documented in Section~\ref{sec:res_claim} is mechanistically attributed to the absence of a CLS-style aggregate query. Adding a CLS token to ViT-RGTS~v2 (queried by a small auxiliary head, \eg\ line-level writer classification during training) should let the registers take over the global-information role more completely and close the token-norm asymmetry of Fig.~\ref{fig:register_quant}(d). This is a small architectural change with a clear predicted signature.
+
+\paragraph{Attention-entropy regularizer.}
+CTC's blindness to attention shape (Section~\ref{sec:disc_registers}) can be addressed by adding a low-weight entropy regularizer on the final-layer patch attention. This would provide the missing gradient signal that currently prevents registers from fully absorbing the sinks. Care is needed: over-regularization would flatten attention rather than sharpen it, so the coefficient should be tuned against attention entropy on a held-out set, not against CER.
+
+\paragraph{Synthetic$\to$IAM curriculum.}
+The synthetic pretraining lane in this report was walltime-truncated. A full curriculum --- pretrain to convergence on the ${\sim}950$K synthetic corpus, fine-tune on IAM with a decayed learning rate --- would test whether the CER gap between the from-scratch ViT-RGTS~v2 ($5.55\%$) and the CNN--RNN baseline ($4.62\%$) can be closed by pretraining, without changing the register-attention story.
+
+\subsection{Closing Remark}
+
+The register-token mechanism does what its authors claim it does, subject to the structural differences between the setting it was proposed in and the setting it is imported into. On the accuracy side the transfer is clean. On the attention side the transfer is partial, and the mechanism of the partiality (patch tokens simultaneously acting as sink-carrying keys and CTC-decoding queries) is itself a research finding: it points at a specific class of extensions (CLS-augmentation, attention regularization) that would complete the transfer. The pipeline and the $63$-run experiment matrix that produced these findings are released with the report so that subsequent work can build directly on top of them.

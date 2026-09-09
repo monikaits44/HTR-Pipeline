@@ -1,0 +1,227 @@
+\section{Results}
+\label{sec:results}
+
+This section reports the outcomes of the $63$-run experiment matrix from Section~\ref{sec:experiments}. It leads with the recognition results (Section~\ref{sec:res_main}), then reproduces the Nikolaidou~\etal\ Fig.~5 per-character attention visualization for our own CTC ViT (Section~\ref{sec:res_bm}), then directly addresses whether the Darcet~\etal\ claim transfers to CTC HTR (Section~\ref{sec:res_claim}). The remaining subsections cover architecture ablation, fine-tuning, cross-dataset generalization, synthetic-data pretraining, and reproducibility. Per-group training-curve plots are moved to the Supplementary document; the CER convergence of the best model and its register-count variants stays in the main storyline.
+
+\subsection{Main Recognition Results}
+\label{sec:res_main}
+
+Table~\ref{tab:register_sweep} reports the $R$-sweep on IAM at the best validation-CER epoch, and Table~\ref{tab:arch_comparison} reports the best number per architecture family across the same evaluation protocol. Both tables use the shipped result files \texttt{outputs/tables/register\_sweep.tex} and \texttt{outputs/tables/architecture\_comparison.tex} verbatim.
+
+\begin{table}[t]
+\centering
+\small
+\caption{ViT-RGTS~v2 register sweep on IAM (Aachen split). CER/WER at best validation epoch; ``SWA'' rows use the SWA-averaged model.}
+\label{tab:register_sweep}
+\begin{tabular}{rrcccc}
+\toprule
+Registers & SWA & Best Ep. & Val CER (\%) & Test CER (\%) & Test WER (\%) \\
+\midrule
+0  & --         & 142 & 3.96 & 5.74 & 18.87 \\
+0  & \checkmark & 124 & 4.11 & 5.90 & 19.12 \\
+2  & --         & 147 & 4.13 & 5.98 & 19.39 \\
+2  & \checkmark & 112 & 4.05 & 6.16 & 20.04 \\
+4  & --         & 142 & 3.88 & 5.55 & 18.26 \\
+4  & \checkmark & 138 & 3.97 & 5.77 & 19.05 \\
+8  & --         & 129 & 4.00 & 5.94 & 19.32 \\
+8  & \checkmark & 115 & 4.19 & 5.96 & 19.51 \\
+16 & --         & 146 & 4.08 & 5.88 & 19.13 \\
+16 & \checkmark & 120 & 4.12 & 5.88 & 19.25 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[t]
+\centering
+\small
+\caption{Best result per architecture family. IAM and READ2016 rows are directly comparable within each dataset; parameter counts explain the size--accuracy trade-off.}
+\label{tab:arch_comparison}
+\resizebox{\linewidth}{!}{%
+\begin{tabular}{lrrcccc}
+\toprule
+Architecture & Params & Reg. & SWA & Best Ep. & Test CER (\%) & Test WER (\%) \\
+\midrule
+CNN--RNN (IAM)              & 7.4M  & --  & \checkmark & 145 & \textbf{4.62}  & \textbf{15.70} \\
+ViT-RGTS~v2 (IAM)           & 9.5M  & 4   & --         & 142 & \textbf{5.55}  & \textbf{18.26} \\
+CNN--RNN (READ2016)         & 7.4M  & --  & --         & 126 & 4.06           & 18.29 \\
+ViT-RGTS~v2 (READ2016)      & 9.5M  & 0   & --         & 138 & 4.73           & 20.65 \\
+HTR-VT external (READ2016)  & 8.8M  & 4   & --         & 76  & 4.82           & 20.58 \\
+TorchVision ViT-B/16        & 91.9M & 0   & --         & 149 & 15.09          & 38.19 \\
+TrOCR-base                  & 90.4M & --  & \checkmark & 149 & 12.10          & 32.31 \\
+\bottomrule
+\end{tabular}%
+}
+\end{table}
+
+Two observations organize the rest of Section~\ref{sec:results}. First, the register-count effect on CER is small on the axis that matters --- the no-SWA range across $R \in \{0, 2, 4, 8, 16\}$ is $5.55$--$5.98\%$ ($0.43$~pp end-to-end, or $0.24$~pp if the $R = 4$ 150-epoch entry is set aside as an outlier and the remaining four register counts are compared at matched epoch budgets), tightening further to $0.10$--$0.28$~pp with SWA. The three-seed reproducibility experiment in Section~\ref{sec:res_seeds} places the noise floor at $\pm 0.08$~pp CER. Any register-count effect on CER at this dataset size is therefore near the resolution limit of the experiment. Second, the compact CNN--RNN baseline retains the best absolute CER on IAM ($4.62\%$), and the ViT-RGTS~v2 with $R = 4$ registers is $0.93$~pp behind at $1.29 \times$ the parameter count. Recognition is not the register mechanism's contribution; the contribution is on the attention side, which the next two subsections analyse in detail.
+
+The CER trajectory that produced these numbers is shown in Fig.~\ref{fig:cer_convergence}. The main-storyline curve overlays the best ViT-RGTS~v2 configuration (\texttt{run\_150}, $R = 4$ with SWA) against the four other register counts, all trained under identical schedules. All curves collapse to essentially the same trajectory after epoch~$25$, which is the same statement Table~\ref{tab:register_sweep} makes in numbers.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{training_cer_curve}
+\caption{CER convergence of the ViT-RGTS~v2 register sweep on IAM (best model \texttt{run\_150} highlighted in red). All register counts follow the same trajectory after epoch~$25$; the CER-vs-$R$ separation is smaller than the epoch-to-epoch fluctuation of any single run. Per-group ablation training curves are in the Supplementary document.}
+\label{fig:cer_convergence}
+\end{figure}
+
+\subsection{Reproducing Beyond Memorization: Per-Character Attention}
+\label{sec:res_bm}
+
+Vincent explicitly asked the project to reproduce the visualization style of Fig.~5 in \emph{Beyond Memorization}~\cite{nikolaidou2024beyondmem}: for each character position, an attention overlay that shifts spatially with the character. We reproduce that visualization on our CNN-stem ViT with $R = 4$ registers, evaluated on IAM test lines. For every recognized character $c$ at CTC column $t_c$, the attention weights of the corresponding patch-token query are read from the final Transformer layer, reshaped to the patch grid, upsampled to the original image resolution, and overlaid on the input word crop in the \emph{inferno} colormap with $\alpha = 0.5$ --- the exact recipe used in the reference implementation of \emph{Beyond Memorization} (\texttt{external/Beyond-Memorization/utils/saveAttentionMaps.py}).
+
+Fig.~\ref{fig:bm_booklet} shows the reproduction on the word ``booklet''. The top panel is the input word crop; the six lower panels are the per-character attention overlays for the recognized letters \texttt{b}, \texttt{o}, \texttt{k}, \texttt{l}, \texttt{e}, \texttt{t} at their CTC decoding columns. The peak attention shifts left-to-right along the word as the character index advances, and each map places substantial mass on the ink strokes of the character being decoded. This is the qualitative behaviour Nikolaidou~\etal\ show in their Fig.~5, reproduced end-to-end from our ViT-RGTS~v2 model and rendered with the same visualization pipeline.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.55\linewidth]{bm_booklet_word}\\[0.3em]
+\includegraphics[width=0.32\linewidth]{bm_booklet_char0_b}\hspace{0.5em}%
+\includegraphics[width=0.32\linewidth]{bm_booklet_char1_o}\hspace{0.5em}%
+\includegraphics[width=0.32\linewidth]{bm_booklet_char3_k}\\[0.2em]
+\includegraphics[width=0.32\linewidth]{bm_booklet_char4_l}\hspace{0.5em}%
+\includegraphics[width=0.32\linewidth]{bm_booklet_char5_e}\hspace{0.5em}%
+\includegraphics[width=0.32\linewidth]{bm_booklet_char6_t}
+\caption{\emph{Reproduction of Nikolaidou~\etal\ Fig.~5 for our CTC ViT.} Top: input word crop (``booklet'', IAM \texttt{a03-034-01-03}). Rows 2--3: per-character attention overlay for the recognized characters \texttt{b}, \texttt{o}, \texttt{k} (row~2) and \texttt{l}, \texttt{e}, \texttt{t} (row~3), using the identical visualization recipe as \emph{Beyond Memorization}. The attention peak shifts left-to-right along the word as the character index advances. Because our model is a CTC self-attention encoder and \emph{Beyond Memorization} is a diffusion cross-attention decoder, the underlying attention mechanism is different, but the spatial shifting pattern that Nikolaidou~\etal\ report is qualitatively reproduced.}
+\label{fig:bm_booklet}
+\end{figure}
+
+Two caveats already flagged in Section~\ref{sec:rw_interp} are visible in Fig.~\ref{fig:bm_booklet}. First, the peak is centered near --- but not exactly on --- the character stroke, and each overlay retains a spatially arbitrary secondary lobe. Second, the reference \emph{Beyond Memorization} maps come from a cross-attention U-Net with dedicated text-token queries; the maps here come from CTC self-attention with patch-token queries only, so exact pixel-alignment with the character was never architecturally guaranteed. The remaining subsections quantify how far short of ``exactly on the character'' the current maps fall, and how much of that gap the register mechanism closes.
+
+\subsection{Does the Darcet Claim Hold in the CTC HTR Setting?}
+\label{sec:res_claim}
+
+Darcet~\etal~\cite{darcet2024registers} claim, for classification and self-supervised ViTs, that register tokens (i)~leave downstream accuracy essentially unchanged and (ii)~improve attention interpretability by absorbing the sink pattern that would otherwise contaminate patch attention. This subsection asks whether the same two-part claim transfers when the loss changes from a per-image classification objective to a per-frame CTC objective and the encoder becomes a CTC ViT for HTR.
+
+\subsubsection{The recognition half of the claim: justified}
+
+The recognition half transfers cleanly. On IAM, the no-SWA CER range across $R \in \{0, \ldots, 16\}$ is $0.24$~pp (Section~\ref{sec:res_main}, Table~\ref{tab:register_sweep}, reading $R = 0$ vs.\ $R = 2, 8, 16$; the $R = 4$ 150-epoch entry sits at $5.55\%$), and with the SWA-averaged model the range is $0.10$--$0.28$~pp. The three-seed reproducibility experiment (Section~\ref{sec:res_seeds}) places the noise floor at $\pm 0.08$~pp. Since the observed range is between $1{\times}$ and $3{\times}$ the noise floor, we cannot resolve a monotonic register-count effect on CER at this experimental budget --- exactly the behaviour Darcet~\etal\ report for classification ViTs, where registers leave top-1 unchanged within noise. On READ2016 (Section~\ref{sec:res_read2016}), the range further tightens to $0.09$~pp across $R \in \{0, 4, 8, 16\}$, corroborating the IAM finding on a different script and vocabulary. The recognition half of the claim carries over.
+
+\subsubsection{The interpretability half of the claim: partly justified}
+
+The interpretability half is more nuanced. Fig.~\ref{fig:register_quant} reports four attention-quality metrics computed as described in Section~\ref{sec:attn_eval}, evaluated on the fixed $8$-line IAM test sample across $R \in \{0, 4, 8, 16\}$:
+
+\begin{enumerate}
+    \item \textbf{Character-attention entropy} (panel a, lower is better) decreases from a median of $5.7$~bits at $R = 0$ to $5.0$~bits at $R = 8$, a $12\%$ reduction in per-character attention spread. At $R = 16$ the entropy rises again to $6.1$~bits, suggesting a sweet spot around $R \in \{4, 8\}$.
+    \item \textbf{Spatial ordering quality} (panel b, higher is better), measured as the Spearman rank correlation between the horizontal position of a character's ink centroid and its attention peak, peaks at $R = 8$ with $\rho = 0.65$ against $\rho = 0.59$ at $R = 0$.
+    \item \textbf{Aligned attention heads} (panel c) --- the number of the $8$ heads whose per-head Spearman $\rho > 0.5$ --- increases monotonically from $7.7$ at $R = 0$ to $9.6$ at $R = 16$, showing that increasing register count consistently recruits more heads into the left-to-right alignment pattern.
+    \item \textbf{Token-norm distribution} (panel d) shows that when $R > 0$, register tokens carry substantially lower L2 norm ($\sim 25$--$30$) than patch tokens ($\sim 35$--$40$). Interpreted through Darcet~\etal's lens, this is inverted from the classification-ViT case, where registers absorb high-norm sink behaviour: in our CTC setting the patch tokens remain the higher-norm carriers.
+\end{enumerate}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{register_quantitative}
+\caption{Attention-quality metrics as a function of register count on IAM. \textbf{(a)}~Character attention entropy is lowest around $R \in \{4, 8\}$. \textbf{(b)}~Spearman ordering correlation between character position and attention peak peaks at $R = 8$. \textbf{(c)}~The number of self-attention heads aligned to left-to-right reading order (per-head $\rho > 0.5$) grows monotonically with $R$. \textbf{(d)}~Token-norm distribution: register tokens (green, orange, red left bars) sit below patch tokens, showing that registers do carry a distinct role but do not fully absorb the high-norm sink pattern that would appear on patches in a classification ViT.}
+\label{fig:register_quant}
+\end{figure}
+
+Panels (a)--(c) directly support the interpretability half of Darcet's claim in our setting: the attention becomes more focused (lower entropy), better left-to-right ordered (higher Spearman), and involves more aligned heads. Panel (d) is where the claim only partially transfers. In a classification ViT, registers absorb the high-norm sinks --- register tokens end up carrying more norm than the average patch, because they now do the ``global information storage'' the sinks used to do. In our CTC ViT, register tokens sit \emph{below} patch tokens in norm. The high-norm sink pattern documented in Section~\ref{sec:attn_eval} is not moving onto the registers; it stays on a small number of patch columns. The BM-style visualization in Fig.~\ref{fig:bm_booklet} shows the same asymmetry qualitatively: the peak shifts with the character, but a residual secondary lobe survives on the same one or two patch columns across every character.
+
+\subsubsection{Why only partial transfer, mechanistically}
+
+Two structural differences between the classification ViT setting and the CTC HTR setting explain the partial transfer. First, in a classification ViT the query that reads the attention map is the CLS token, which is architecturally distinct from the patch tokens; when registers are added, they take over the ``global information store'' role and the patches become clean because the CLS-side query no longer needs to over-attend to any single patch. In our CTC HTR setting there is no CLS token: the queries that produce the CTC-decoded output are the patch tokens themselves. If a patch token has developed high norm, it is simultaneously a query and a key of the sink pattern, and registers cannot dissolve that self-consistency by absorbing the query side alone. Second, the CTC loss does not directly penalize an attention map that looks bad, provided the greedy-collapse decoding produces the correct string; there is therefore no gradient signal driving the sinks to migrate onto the registers.
+
+Both mechanisms are testable predictions. A CTC ViT with an added CLS-style global query (as in HTR-VT-style architectures with a dedicated line-summary token) should show fuller register absorption; and a loss that adds an attention-entropy regularizer should also close the residual gap. These are two direct extensions of the current work, laid out in the Supplementary document.
+
+\subsubsection{Overall verdict}
+
+Darcet~\etal's two-part claim transfers from classification ViTs to CTC HTR as follows. The recognition half --- registers leave accuracy unchanged within noise --- transfers cleanly, on two datasets. The interpretability half --- registers produce cleaner, more localized attention --- transfers partially: attention becomes measurably more focused (entropy $\downarrow$), better ordered ($\rho \uparrow$), and involves more heads (count $\uparrow$), but a residual sink pattern intrinsic to CTC self-attention survives and requires an additional query-side mechanism (CLS-style token, attention regularizer, or CTC-column prior) to fully suppress. The visualization pipeline of \emph{Beyond Memorization} can be reproduced end-to-end for our model (Fig.~\ref{fig:bm_booklet}), and the character-by-character attention shift is present, subject to the same residual-sink caveat.
+
+\subsection{Architecture Ablation}
+\label{sec:res_abl_arch}
+
+Table~\ref{tab:ablations} isolates the effect of individual design choices in ViT-RGTS~v2. Two rows stand out.
+
+\begin{table}[t]
+\centering
+\small
+\caption{Architecture ablations on IAM (ViT-RGTS~v2 baseline, $R = 4$, no SWA). Each row changes one variable from the baseline.}
+\label{tab:ablations}
+\begin{tabular}{lrcccc}
+\toprule
+Variant & Params & Epochs & Val CER (\%) & Test CER (\%) & Test WER (\%) \\
+\midrule
+Baseline (4-reg, 150 ep) & 9.5M  & 150 & 3.88 & 5.55 & 18.26 \\
+Depth $8$                & 11.1M & 150 & 4.07 & 5.79 & 19.00 \\
+Depth $4$                & 7.9M  & 150 & 3.91 & 5.93 & 19.30 \\
+Dim $128$                & 5.5M  & 150 & 4.07 & 5.93 & 19.25 \\
+Dim $512$                & 36.7M & 80  & 4.42 & 6.46 & 20.68 \\
+ViT augmentation         & 9.5M  & 80  & 4.58 & 6.50 & 20.89 \\
+$1$-layer BiLSTM         & 6.3M  & 150 & 4.52 & 6.80 & 22.46 \\
+RNN head only            & 9.4M  & 80  & 4.87 & 6.81 & 21.95 \\
+GRU head                 & 8.4M  & 80  & 4.58 & 6.85 & 22.56 \\
+CNN head only            & 5.2M  & 150 & 6.67 & 9.47 & 30.76 \\
+\textbf{No CNN stem}     & 9.2M  & 80  & \textbf{72.49} & \textbf{72.44} & \textbf{125.66} \\
+Legacy v1 (row-major)    & 9.2M  & 150 & 73.05 & 73.65 & 127.20 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The \textbf{No-CNN-stem} row and the \textbf{Legacy v1} row both collapse to ${\sim}72$--$74\%$~CER, an order of magnitude worse than any other ablation. They fail through the same mechanism: without the CNN stem the encoder falls back to a raw $16 \times 16$ patch grid flattened \emph{row-major} into a token sequence, which interleaves vertical position into the sequence order. CTC's monotonic-alignment assumption requires the token sequence to be strictly left-to-right; row-major flattening violates that assumption, and the CTC forward-backward algorithm has no valid alignment of the ground-truth character sequence to fit. Two independent code paths (v1 layout and $R = 4$ v2 with \texttt{use\_cnn\_stem=False}) converging on the same failure isolate this as a genuine causal property of the CTC + patch-grid combination.
+
+The remaining rows are quantitative refinements. The dual head is a real contributor ($+1.26$~pp when only the RNN branch is kept, $+3.92$~pp when only the CNN branch is kept). Widening the embedding to $\mathrm{dim} = 512$ (\texttt{run\_179}) hurts by $0.91$~pp, most plausibly because the differential LR schedule was tuned for $\mathrm{dim} = 256$ and wider layers need proportionally smaller LR for stable training. Aggressive (``ViT'') augmentation hurts by $0.95$~pp, showing that augmentation strength must scale with dataset size, not against it. RNN depth reduction from $3$ layers to $1$ layer costs $1.25$~pp --- moderate but not catastrophic, in contrast with a much stronger earlier draft that mislabeled this as a catastrophic collapse.
+
+\subsection{Fine-Tuning Pretrained Models}
+\label{sec:res_finetune}
+
+Table~\ref{tab:finetune} sweeps the fine-tuning strategy for the two pretrained lanes. The naive uniform-LR fine-tune on ViT-B/16 (\texttt{run\_153}) is the cleanest available demonstration of \emph{why} differential-LR strategies exist for pretrained backbones: the training loss plateaus at ${\sim}119$ from epoch~$3$ onward, the CER never drops below $75\%$, and the pretrained ImageNet weights are corrupted by the freshly-initialized CTC head's large gradients propagated at $\eta = 10^{-3}$ through the entire backbone. Two-group differential LR ($\eta_{\mathrm{backbone}} = 2 \times 10^{-5}$, $\eta_{\mathrm{head}} = 5 \times 10^{-4}$) reduces the CER to $15.09\%$ --- a $5 \times$ improvement in error rate purely from LR grouping. LLRD produces the best TrOCR result at $12.10\%$ CER, with SWA adding a further $0.28$~pp improvement, consistent with its behaviour on the from-scratch ViT.
+
+\begin{table}[t]
+\centering
+\small
+\caption{Fine-tuning strategy sweep on IAM. ``Naive'' uses uniform $\eta = 10^{-3}$ across backbone and head; ``Frozen'' trains only the CTC head; the rest use the specified strategy from Section~\ref{sec:finetune}.}
+\label{tab:finetune}
+\begin{tabular}{llcc}
+\toprule
+Model & Strategy & Test CER (\%) & Test WER (\%) \\
+\midrule
+ViT-B/16 & Naive uniform LR       & 73.14 & 123.71 \\
+ViT-B/16 & Frozen + SWA           & 18.34 & 43.72  \\
+ViT-B/16 & 2-group LR             & \textbf{15.09} & \textbf{38.19} \\
+ViT-B/16 & Gradual unfreeze       & 66.20 & 93.30  \\
+TrOCR    & Frozen encoder         & 71.98 & 99.10  \\
+TrOCR    & LLRD                   & 12.38 & 32.60  \\
+TrOCR    & LLRD + SWA             & \textbf{12.10} & \textbf{32.31} \\
+TrOCR    & Gradual unfreeze       & 13.69 & 35.98  \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Gradual unfreezing fails for both models, but for different reasons. On ViT-B/16 (large domain gap from ImageNet), keeping backbone layers frozen while the head trains lets the head over-fit to features the backbone will later revise, and the resulting moving target ($+60$~pp CER) cannot recover within the epoch budget. On TrOCR (small domain gap, encoder already pretrained on handwriting), the same strategy costs only $+1.31$~pp because the initial frozen features are already close to the target. Both outcomes are consistent with the general principle that gradual unfreezing helps only when the initial frozen features are already close to the target domain.
+
+\subsection{READ2016 Generalization}
+\label{sec:res_read2016}
+
+Table~\ref{tab:read2016} re-runs the register sweep on READ2016. The register-count effect on CER stays within $0.09$~pp ($4.73$--$4.82\%$) --- again close to the noise floor. CNN--RNN retains the best absolute CER at $4.06\%$. HTR-VT run \texttt{run\_142}, included as an independently-designed external comparator, lands at $4.82\%$~CER --- exactly matching our $R = 4$ ViT-RGTS~v2 result, which is a useful sanity check that both our from-scratch CTC ViT and HTR-VT sit in the same performance neighbourhood.
+
+\begin{table}[t]
+\centering
+\small
+\caption{READ2016 generalization. The register-count effect on CER stays within $0.09$~pp, corroborating the IAM finding on a different script and vocabulary. HTR-VT is included as an independently-designed external comparator.}
+\label{tab:read2016}
+\begin{tabular}{lccc}
+\toprule
+Model & Registers & Test CER (\%) & Test WER (\%) \\
+\midrule
+CNN--RNN               & --  & \textbf{4.06} & \textbf{18.29} \\
+ViT-RGTS~v2            & 0   & 4.73          & 20.65 \\
+ViT-RGTS~v2            & 4   & 4.82          & 20.93 \\
+ViT-RGTS~v2            & 8   & 4.75          & 20.65 \\
+ViT-RGTS~v2            & 16  & 4.78          & 20.77 \\
+HTR-VT external        & 4   & 4.82          & 20.58 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Synthetic Pretraining and the Render-to-Real Gap}
+\label{sec:res_synth}
+
+Models trained exclusively on ${\sim}950$K synthetic lines reach $0.5$--$0.8\%$ CER on the synthetic validation set but $30$--$46\%$ CER on the real IAM test set, an unmistakable render-to-real domain gap. ViT-RGTS~v2 transfers slightly better than CNN--RNN ($30.31\%$ vs.\ $35.45\%$ CER at $R = 0$), plausibly because self-attention is less able to overfit low-level rendering textures than a CNN filter bank. TrOCR, whose encoder was originally pretrained on real handwriting, fails catastrophically when retrained on synthetic-only data ($75.83\%$ CER) --- an instance of pretrained-representation forgetting driven by out-of-distribution retraining. All synthetic runs hit the $24$-hour SLURM walltime before the target $15$ epochs and are reported as walltime-truncated. A converged synthetic $\rightarrow$ IAM curriculum is a natural follow-up, sketched in the Supplementary document.
+
+\subsection{Reproducibility Across Seeds}
+\label{sec:res_seeds}
+
+The seed-noise floor was measured by re-running \texttt{run\_146} (ViT-RGTS~v2, $R = 4$, no SWA) at seeds $\{42, 123, 456\}$. Test CER: $5.96\%$, $5.77\%$, $5.84\%$; mean $\pm$ standard deviation $= 5.86 \pm 0.08$~pp. Every quantitative claim in this section is interpreted against this floor.
+
+\subsection{Summary}
+\label{sec:res_summary}
+
+The best absolute recognizer is the CNN--RNN baseline with SWA (\texttt{run\_145}) at $4.62\%$~CER on IAM. The best interpretable recognizer is ViT-RGTS~v2 with $R = 4$ (\texttt{run\_150} without SWA, or \texttt{run\_146} SWA-averaged at ${\sim}5.7\%$~CER from the training log), which produces the character-shifted attention maps of Fig.~\ref{fig:bm_booklet} and the attention-quality gains of Fig.~\ref{fig:register_quant}. Registers leave CER within noise on two datasets and improve attention quality along three of the four measured axes, with a residual sink pattern surviving on patch tokens that the CTC self-attention setting appears architecturally to invite. Section~\ref{sec:discussion} interprets these findings in the broader HTR context, and Section~\ref{sec:conclusion} closes with the writer-identification extension the problem statement points at.

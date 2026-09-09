@@ -1,0 +1,76 @@
+\documentclass[journal,onecolumn]{IEEEtran}
+
+% ---- Essential Packages ----
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{graphicx}
+\usepackage{textcomp}
+\usepackage{xcolor}
+\usepackage{cite}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{multirow}
+\usepackage{url}
+\usepackage[hidelinks]{hyperref}
+\usepackage{microtype}
+
+% ---- Graphics Path ----
+\graphicspath{{./figures/}}
+
+% ---- Custom Commands ----
+\newcommand{\ie}{\textit{i.e.}}
+\newcommand{\eg}{\textit{e.g.}}
+\newcommand{\etal}{\textit{et al.}}
+
+% ---- Hyphenation Fixes ----
+\hyphenation{re-cog-ni-tion in-ter-pret-a-bi-li-ty pre-train-ed fine-tun-ing}
+
+\begin{document}
+
+% ---- Title ----
+\title{Improving HTR Attention Maps with Register Tokens:\\
+A CTC Vision Transformer for Interpretable Handwritten Text Recognition}
+
+% ---- Authors ----
+\author{Monika Radhakisan Chavan\\
+M.Sc.\ in Artificial Intelligence\\
+Friedrich-Alexander-Universit\"{a}t Erlangen-N\"{u}rnberg, Germany\\
+Matriculation No.\ 23288066%
+\thanks{Supervised by Prof.\ Vincent Christlein, Pattern Recognition Lab.}%
+\thanks{This work was conducted as a Master's research project (10~ECTS).}%
+\thanks{Manuscript date: September 2026.}%
+}
+
+\markboth{Master's Research Project Report, September 2026}%
+{Improving HTR Attention Maps with Register Tokens}
+
+\maketitle
+
+% ---- Abstract & Keywords ----
+\input{sections/abstract}
+
+% ---- Main Sections ----
+\input{sections/introduction}
+
+\input{sections/related_work}
+
+\input{sections/methodology}
+
+\input{sections/experiments}
+
+\input{sections/results}
+
+\input{sections/discussion}
+
+\input{sections/conclusion}
+
+% ---- Acknowledgments ----
+\section*{Acknowledgment}
+The author thanks Prof.\ Vincent Christlein for supervising this project and for the sustained feedback that shaped its direction. Computational resources were provided by the NHR@FAU high-performance computing centre at Friedrich-Alexander-Universit\"{a}t Erlangen-N\"{u}rnberg. The author also thanks the authors of the \emph{Beyond Memorization} paper for the discussion around their attention-visualization approach, and the authors of the \emph{HTR Best Practices} and \emph{ViT-RGTS} repositories for the open-source codebases that this work builds on.
+
+% ---- References ----
+\bibliographystyle{IEEEtran}
+\bibliography{references}
+
+\end{document}

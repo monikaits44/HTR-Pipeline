@@ -1,0 +1,59 @@
+\section{Related Work}
+\label{sec:related_work}
+
+Three research threads converge in this report: Handwritten Text Recognition (HTR) with sequence losses, Vision Transformers and the register-token intervention that improves their attention quality, and attention-based interpretability for downstream document tasks. This section covers each thread and ends with an explicit positioning of the CTC-ViT-with-registers combination against the closest published work.
+
+\subsection{Handwritten Text Recognition}
+\label{sec:rw_htr}
+
+Modern offline HTR pipelines are dominated by two families. The first is the CNN--BiLSTM--CTC family, in which a convolutional stem extracts local stroke features, a bidirectional recurrent head models sequence dependencies, and Connectionist Temporal Classification (CTC)~\cite{graves2006ctc} resolves the length mismatch between the fixed output grid and the variable-length character sequence. The reference implementation for this family is the ``Best Practices'' baseline of Retsinas~\etal~\cite{retsinas2022htrbestpractices}, which combines three modifications --- aspect-ratio-preserving input, column-wise max-pooling to collapse the height axis into a 1D token sequence, and an auxiliary CTC shortcut branch --- to reach ${\sim}4.6\%$~CER on IAM with a compact CNN--LSTM model. This baseline directly underpins the CNN--RNN branch of our pipeline and defines the ``low-CER'' bar against which the ViT branch is measured. A broader survey of the HTR field is given by Memon~\etal~\cite{memon2020htrsurvey}, who catalog the shift from HMM-based recognizers to the current CNN-recurrent and Transformer-based systems, along with the standard dataset landscape (IAM, RIMES, READ) and evaluation protocols (CER, WER).
+
+The second family replaces the CNN encoder with a Vision Transformer (ViT). HTR-VT~\cite{li2024htrvt} keeps a CNN stem for the initial 2D-to-1D reduction but delegates sequence encoding to a plain ViT encoder with a small span-masking regularizer, again supervised by CTC; it demonstrates that ViT encoders can match or exceed CNN--LSTM performance on IAM, READ2016, and other benchmarks at a comparable parameter budget. TrOCR~\cite{li2023trocr}, in contrast, replaces the entire pipeline with a pretrained ViT encoder--decoder trained on 684M synthetic and real handwriting lines. TrOCR reaches very low CER but at a ${\sim}90\times$ larger parameter count than the Retsinas baseline, and its attention structure --- driven by autoregressive cross-attention from character queries to image keys --- is architecturally distinct from CTC self-attention. Both HTR-VT and TrOCR are used as external comparators in Section~\ref{sec:results}; neither integrates register tokens, and neither analyses attention quality under a register-count sweep.
+
+\subsection{Vision Transformers and Register Tokens}
+\label{sec:rw_registers}
+
+The Transformer architecture~\cite{vaswani2017attention} and its Vision Transformer variant~\cite{dosovitskiy2021vit} replace convolutional feature extraction with a stack of multi-head self-attention blocks that operate on a flattened patch sequence. In a canonical classification ViT, a special \texttt{CLS} token is prepended to the patch sequence, self-attention aggregates image content into it across layers, and a linear head decodes the final \texttt{CLS} representation into a class posterior. Attention maps from the last few layers of such a model are commonly inspected for interpretability --- either as a saliency proxy or as the primary output of dense-prediction methods derived from ViTs.
+
+Darcet~\etal~\cite{darcet2024registers} identified a specific failure mode of this interpretability. In sufficiently well-trained supervised and self-supervised ViTs, a small number of patch tokens develop anomalously high norms and disproportionate attention mass; these tokens act as \emph{attention sinks}, absorbing global information the model would otherwise have no place to store. The visible symptom is a set of bright, spatially arbitrary artifacts in the attention maps that do not correspond to any semantically meaningful part of the image. Their fix is to prepend $R$ additional learnable tokens, called \emph{register tokens}, to the patch sequence. The sinks migrate onto the registers during training, leaving the patch tokens with cleaner, more localized attention. On classification ViTs, adding $R \in \{4, 8, 16\}$ registers leaves top-1 accuracy essentially unchanged (deltas within noise) while measurably improving downstream detection and segmentation from the same features. The register mechanism does not require architectural surgery, does not add a new loss term, and adds only $R \cdot D$ parameters to a model of embedding width $D$.
+
+The claim by Darcet~\etal\ is stated for classification ViTs and dense-prediction models derived from them. It has not been evaluated for sequence-labelling ViTs supervised by CTC. Two structural differences separate the two settings. First, a CTC ViT has no CLS query --- the patch tokens are simultaneously the queries and the keys of the attention operation that produces the output logits, so any sink behaviour is produced by the same token population that reads it. Second, the CTC loss is agnostic to attention structure and does not directly penalize a map that ``looks'' bad if the decoded character sequence is correct. Whether registers still absorb the sinks in this setting, and whether that absorption translates into cleaner per-character attention maps, is the empirical question of this report.
+
+\subsection{Attention-Based Interpretability and Downstream Writer Analysis}
+\label{sec:rw_interp}
+
+The interest in clean HTR attention maps is driven by two concrete downstream applications: attention-based character localization for synthetic-handwriting generation, and character-indexed feature aggregation for writer identification.
+
+The first application is developed by Nikolaidou~\etal\ in \emph{Beyond Memorization}~\cite{nikolaidou2024beyondmem}, a training-free style-mixing method for handwritten text generation built on top of a pretrained diffusion model. Their Figure~5 shows per-character attention maps localized on individual glyphs in the rendered output --- the visualization style that Vincent explicitly asked this project to reproduce in an HTR-recognition setting. Two caveats deserve statement now, so that Section~\ref{sec:results} can be read against them. First, the \emph{Beyond Memorization} maps are cross-attention maps from a diffusion U-Net, in which explicit text-token queries attend to image-region keys. Our HTR self-attention setting has no equivalent text-token query at inference: the queries are the patch tokens themselves, and character positions are recovered from the CTC decoding column rather than from a text-side query slot. Second, the Nikolaidou~\etal\ system operates on word-crop images (roughly $256 \times 64$) whereas HTR line images are ${\sim}1024 \times 128$ --- an aspect ratio that produces thin horizontal attention grids rather than the near-square grids the \emph{Beyond Memorization} visualization was designed for. Section~\ref{sec:results} treats these differences as a genuine finding of the project, not as a limitation to hide.
+
+An earlier precursor of the same line of work is WordStylist~\cite{nikolaidou2023wordstylist}, which introduced the writer-embedding-injection idea used by \emph{Beyond Memorization}. WordStylist is not a direct comparator here, but its rendered-line pipeline is close in spirit to the synthetic-handwriting corpus of ${\sim}950$K lines used in the pretraining lane of Section~\ref{sec:results}.
+
+The second downstream application is writer identification via character-indexed feature aggregation. Souibgui~\etal~\cite{souibgui2022vlac} introduce Vectors of Locally Aggregated Characters (VLAC): rather than compute writer descriptors from an entire page, they aggregate local descriptors extracted at each recognized character position, weighted by the recognizer's per-character attention. The method's interpretability comes from the fact that the aggregation weights and locations are readable at the character level. VLAC is the concrete downstream justification for this project's brief: any pipeline that produces cleanly character-localized attention over an HTR line is a direct input to a VLAC-style writer descriptor. The Supplementary document that accompanies this report sketches how the ViT-RGTS~v2 attention maps from Section~\ref{sec:results} would plug into a VLAC-style pipeline; a full writer-identification experiment is out of the scope of the 10~ECTS project budget.
+
+\subsection{Positioning of This Work}
+\label{sec:rw_positioning}
+
+Table~\ref{tab:positioning} summarizes the position of this work against the three closest neighbours: HTR-VT, TrOCR, and the classification ViT of Darcet~\etal.
+
+\begin{table}[t]
+\centering
+\small
+\caption{Positioning against the closest published work.}
+\label{tab:positioning}
+\resizebox{\linewidth}{!}{%
+\begin{tabular}{lccccc}
+\toprule
+System & Loss & Encoder & Registers & Attention analysis & HTR data \\
+\midrule
+Retsinas~\etal~\cite{retsinas2022htrbestpractices} & CTC & CNN--BiLSTM & --- & --- & IAM, RIMES \\
+HTR-VT~\cite{li2024htrvt} & CTC & CNN+ViT & --- & no register sweep & IAM, READ2016, \dots \\
+TrOCR~\cite{li2023trocr} & Cross-entropy & Pretrained ViT+dec. & --- & cross-attention viz & 684M synth+real \\
+Darcet~\etal~\cite{darcet2024registers} & Classification / SSL & ViT & $R \in \{4,8,16\}$ & attention/sink analysis & ImageNet \\
+\midrule
+\textbf{This report} & \textbf{CTC} & \textbf{CNN+ViT} & $R \in \{0,2,4,8,16\}$ & \textbf{register sweep, per-char maps} & \textbf{IAM, READ2016 (+ synth.)} \\
+\bottomrule
+\end{tabular}%
+}
+\end{table}
+
+The specific gap this report fills is the empty cell where CTC-based HTR meets the register-token intervention, with an attention-quality analysis that is systematic across register counts and evaluated on two datasets. The methodological substrate is the Retsinas~\etal\ CTC pipeline; the ViT encoder follows the design used in HTR-VT; the register mechanism follows Darcet~\etal; the visualization style targets Nikolaidou~\etal\ Fig.~5; and the downstream motivation is Souibgui~\etal~VLAC. No single existing paper combines these five components.

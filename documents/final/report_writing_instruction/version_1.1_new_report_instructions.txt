@@ -1,0 +1,110 @@
+Now convert current vreport version as backup version 1 and then follow below changes
+
+Act as expert and research expert who is expert at writing research paper and reports, implimenet below suggested changes as per instructions:
+Collective pointers to change : 
+x. remove any unnesessary white spaces, make sure report looks neat and clean
+x. update date to 11 septermeber 2026
+x. Citations verify peroperfy should be following consistent formating and standard and aligned correctly as per respetive places, verify all the data stated respective to citations
+0. may be add it after table 4 but you decide what best suits to storyline:missing image add /home/hpc/iwi5/iwi5369h/HTR-Pipeline/outputs/pub_figures/ctc_posterior.png align properly and with proper resolution on page , add its content, context  and align it with best storyline
+1. For abstract you mentioned below :
+First, on the recognition axis the register count is neutral within seed noise on both
+datasets, matching Darcet et al.’s own observation for classification. Second, on the attention axis
+register tokens visibly reduce the sink pattern and shift the character-attention peak onto the queried
+character, but a residual sink survives on patch columns because a CTC self-attention encoder has
+no dedicated aggregate query separated from the patches.
+as part of results and abstract may be somewhere in writing you can mention a critic or logic saying as the Vit MODELS are data hungary unsure about amount of data sufficient to observe the outliner effect and then it could be addressed with register token paper - wherever it fits best to the storyline
+2. remove long dashes which basically shows that the content is ai generated remove that — and adjust writing accordingly
+3. this looks odd you dont have to say like this : The contributions of this report can be summarized in five sentences
+rather refoumlate paragraph as per reseaarch standard and update it
+The contributions of this report can be summarized in five sentences: I show that register tokens
+are CER-neutral within seed noise on both IAM and READ2016, matching the observation of Darcet et
+al. for classification ViTs; I show that they reduce attention entropy, improve spatial ordering, and
+recruit more heads into the left-to-right reading pattern, while a residual sink survives on patch tokens;
+I reproduce the per-character attention visualization of Nikolaidou et al. end-to-end on the register
+added ViT; I identify the CNN stem (with strict left-to-right token order) as a structural requirement
+for CTC ViTs, evidenced by two independent architectural configurations that collapse to nearly 73%
+CER; and I release the complete training and evaluation pipeline together with the run artifacts that
+produced these numbers, so that the writer-identification step suggested by the problem statement
+can be built directly on top.
+4. reformulate this paragraph looks too machanistic - may be write bit naturally still crisp and concise
+The remainder of the report is organized as follows. Section 2 surveys the HTR, register-token,
+and attention-interpretability literature and positions this work within it. Section 3 describes the
+pipeline, datasets, and models. Section 4 lays out the evaluation protocol. Section 5 presents the
+recognition results, reproduces the Beyond Memorization visualization on the trained model, and
+critically assesses whether the Darcet et al. claim holds in the CTC HTR setting. Section 6 interprets
+the findings, and Section 7 closes with the writer-identification extension.
+5. Verify if below paragraph is correct if not then update it and keep it more crisp and concise:
+Two structural differences separate the classification-ViT setting from the CTC HTR setting used
+in this report. First, a CTC ViT has no dedicated CLS query: the queries that produce the CTC
+decoded output are the patch tokens themselves. Second, the CTC loss is agnostic to attention
+structure and does not directly penalize a map that “looks” bad if the greedy decoding is correct.
+Both differences suggest that the register-token effect on attention may not transfer cleanly, and this
+is the specific question the report evaluates.
+6. this sentences looks odd glyphs is not scitific word and overall make it more crisp and concise and wasy to follow :
+Their Figure 5 shows per
+character attention maps localized on individual glyphs, produced by the cross-attention layers of a
+diffusion U-Net in which explicit text-token queries attend to image-region keys.
+7. looks bit odd to me more natural sctitifc writing human written easy to follow:
+Positioning-wise, this report combines three elements that no prior work combines: a CTC-based
+sequence-labelling loss, a register-token intervention, and a per-character attention-quality analysis of
+the resulting maps. The methodological substrate is Retsinas et al. [13]; the encoder follows the design
+used in HTR-VT [7]; the register mechanism follows Darcet et al. [1]; and the visualization target is
+Nikolaidou et al. [12] Fig. 5, with the honest caveat that our attention type differs from theirs.
+8. Alignment of this line is not proper going outside of the margin, make it proper:
+The generalization test set is READ2016 — historical German handwriting distributed as 8,349/1,040/1,138
+train/val/test lines with an 88-class vocabulary.
+9. verify if the Loss formula given in below section number 2 is correct :
+CTC head
+All encoders share a dual-branch CTC head. A three-layer BiLSTM (hidden = 256) followed by a
+linear projection produces the primary character posteriors; a parallel 1×3 convolution with linear
+projection produces a shortcut posterior. Both are supervised by CTC loss [3],
+L =LCTC(logprnn)+λLCTC(logpcnn), (2)
+10. For fig 1 more crisp and concise title less verbose and still more crisp and concise for fig name currents its : Figure 1: End-to-end HTR pipeline. Register tokens (highlighted) are prepended to the patch-token sequence and shift the attention behaviour of the encoder without adding a decoder-side query.
+11. in below senetnce verify if cuDNN is correct or not if not correct the senetce properly :
+A five-epoch linear warmup is followed by cosine annealing to 10−6. All runs use 150 epochs,
+seed 42, deterministic cuDNN
+12. for table 1 more crisp and concise title less vernose still more precise may be also dont mention 150 epoch as its already cover at differnt stages:
+Table 1: Structure of the evaluation. IAM and READ2016 blocks use 150-epoch schedules with the same
+seed and identical evaluation protocol; the synthetic block was capped by cluster walltime and its numbers are
+reported as lower bounds on convergence.
+13. may be its not necessary to mention 8 or how many here  so modify senetcne according to that : Section 5, applied to a
+fixed sample of eight IAM test lines chosen for diverse length, writer style, and character content, and
+re-used across all register counts to keep visual comparisons fair.
+14. May be current we dont need this supplimentory sheet , so put this version in backup after doing this modify this paragraph accordingly :
+This section reports the outcomes of the evaluation described in Section 4. It leads with the recognition
+results, reproduces the Nikolaidou et al. [12] per-character attention visualization on the trained model,
+and then directly assesses whether the Darcet et al. [1] claim transfers to CTC HTR. Ablation, fine
+tuning, cross-dataset, synthetic-data, and reproducibility results follow. Per-group training curves are
+collected in the accompanying Supplementary document<remove this >; the convergence of the register sweep on
+IAM stays in the main storyline<don;t say storyline proper paragraph formulate>.
+15.For fig 2 more crisp and concise title less verbose and still more crisp and concise for fig name currents its :Figure2: CERconvergenceof theViT-RGTSregister sweeponIAM.All register counts followthe same
+trajectoryafterepoch25; theCER-versus-Rseparationissmallerthantheepoch-to-epochfluctuationofany
+singlerun.Per-groupablationandfine-tuningtrainingcurvesareshownintheSupplementarydocument.<remove mention of supplimentory document>
+16.this senetce looks bit odd and too technical may be more crisp and concise and easy to follow and update it accordingly :  the Spearman rank correlation between character position and attention
+peak position improves from ρ = 0.59 to ρ = 0.65; and the number of heads whose per-head Spearman
+ρ >0.5 grows monotonically from 7.7 at R = 0 to 9.6 at R = 16.
+17. starting of the pragaraph looks bit odd may be write as per scitific standard : A third interpretive note belongs here. Vision Transformers are known to be data-hungry, and both
+IAM (∼6.5K training lines) and READ2016 (∼8.3K training lines) are small by modern deep-learning
+standards. It is entirely possible that at a substantially larger training scale — of the order used for
+TrOCR pretraining — the register mechanism reaches the full sink-absorption regime Darcet et al.
+report for ImageNet-scale classification ViTs. The current results are consistent with the register
+mechanism being a real intervention that is under-driven by data at HTR-benchmark scale.
+18. For this paper : Interpretable Writer Recognition via Vectors of Locally Aggregated Characters
+ correct citation : Raven, T., Christlein, V., Fink, G.A. (2026). Interpretable Writer Recognition via Vectors of Locally Aggregated Characters. In: Yin, XC., Karatzas, D., Lopresti, D. (eds) Document Analysis and Recognition – ICDAR 2025. ICDAR 2025. Lecture Notes in Computer Science, vol 16026. Springer, Cham. https://doi.org/10.1007/978-3-032-04627-7_25 modify according to concistent format you follow
+next for this paper Beyond Memorization: Training-Free Style Mixing for Variability in Handwritten Text Generation Using Writer Embedding Injection in Pretrained Diffusion Models correct citation: Gurav, A., Chanda, S., Krishnan, N.C. (2026). Beyond Memorization: Training-Free Style Mixing for Variability in Handwritten Text Generation Using Writer Embedding Injection in Pretrained Diffusion Models. In: Yin, XC., Karatzas, D., Lopresti, D. (eds) Document Analysis and Recognition – ICDAR 2025. ICDAR 2025. Lecture Notes in Computer Science, vol 16026. Springer, Cham. https://doi.org/10.1007/978-3-032-04627-7_27
+next for : Best Practices for a Handwritten Text
+Recognition System : @misc{retsinas2024bestpracticeshandwrittentext,
+      title={Best Practices for a Handwritten Text Recognition System}, 
+      author={George Retsinas and Giorgos Sfikas and Basilis Gatos and Christophoros Nikou},
+      year={2024},
+      eprint={2404.11339},
+      archivePrefix={arXiv},
+      primaryClass={cs.CV},
+      url={https://arxiv.org/abs/2404.11339}, 
+
+
+
+
+Citations verify peroperfy should be following consistent formating and standard and aligned correctly as per respetive places, verify all the data stated respective to citations
+
+review overll report in detail and step by step as eventually now I plan to submit this copy of the report, so make sure everything is checked and verified peroperly  and in detail , also make sure results and experiements are reviewed should have the essence that who wrote the results justifying giveing why behind results for qualitiative and quantiative results aspects also thinking critically and logically and giving reasoning peroperly as per scitific standards which are convincing enough and gives reader understanding of it.

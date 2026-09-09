@@ -1,0 +1,77 @@
+
+Master's Project Report — Writing Prompt
+
+Context: Master's Project, Pattern Recognition Lab. Topic: Handwritten Text Recognition (HTR) with register tokens / Vision Transformers.
+
+Step 0 — Ground yourself in the source material (do this before writing anything)
+
+Before drafting a single word:
+
+Read every file in /home/hpc/iwi5/iwi5369h/HTR-Pipeline/archive/problem statement. Summarize the problem statement in your own words (3–5 sentences) and confirm your understanding with me before proceeding.
+List every paper in /home/hpc/iwi5/iwi5369h/HTR-Pipeline/archive/papers. For each one, extract: core claim, method, dataset used, and the specific result or idea I am borrowing/building on/contrasting against.
+Build a paper → report section map: which paper supports which claim in which section. This map is the source of truth for every citation later — if a claim isn't in this map, it doesn't go in the report.
+Propose a title for the report based on the actual problem statement and methodology (not a generic HTR title) — something specific to what makes this project distinct (e.g. the register-token / attention-quality angle). Give me 2–3 options with one-line justifications; I'll pick.
+Locate and list available result artifacts (e.g. outputs/tables/unified_results.tex, any figures, attention maps, ablation logs). Note which section each belongs to.
+
+Do not proceed to Step 1 until I've confirmed the summary, the paper map, and the title.
+
+Step 1 — Report structure
+
+Use this structure. Subsections are a starting point — adapt if the material demands it, but tell me why if you deviate.
+
+Abstract
+Index Terms
+Table of Contents
+1. Introduction
+1.1 Background & Motivation (HTR problem, why attention maps/registers matter)
+1.2 Problem Statement
+1.3 Research Gap
+1.4 Research Questions / Objectives
+1.5 Contributions
+2. Related Work
+2.1 HTR approaches and best practices
+2.2 Vision Transformers and the register-token literature
+2.3 Positioning this work relative to prior approaches (explicit bridge into Methodology)
+3. Methodology
+3.1 System Overview
+3.2 Dataset & Data Preparation (IAM, Aachen splits)
+3.3 Model Architecture (CNN-RNN vs. ViT-RGTS v2, CNN stem design, register tokens)
+3.4 Pretraining / Fine-tuning Strategy
+3.5 Baselines
+3.6 Implementation Details (hyperparameters, hardware)
+4. Evaluation
+4.1 Evaluation Metrics (CER/WER)
+4.2 Experimental Design
+4.3 Ablation Study Design
+5. Results
+5.1 Main Quantitative Results (CER/WER tables — pull from unified_results.tex)
+5.2 Ablation Results
+5.3 Attention Map Analysis (register effect on attention quality, BM-style visualization)
+5.4 Qualitative Results
+6. Discussion
+CNN stem criticality, SWA asymmetry, register "sweet spot," pretrained-model gap
+7. Conclusion & Future Work
+Appendix
+<make appropriate changes as per required>
+Every section should read as: clear storyline first, then the artifact that backs it up — not a data dump followed by an explanation. State the claim, then show the table/figure that proves it.
+
+Step 2 — Work section by section, with a fixed pipeline per section
+
+For each section, in order:
+
+/writer — draft the section in my voice, grounded strictly in the paper map and problem statement from Step 0. No claim without a source in the map; no numbers that aren't pulled from an actual results file.
+/fact-checker — check every statistic, claim, and citation against the source files. Flag anything you can't verify instead of softening it into vague language — tell me explicitly "this number is unverified."
+/anti-AI style + /ban-the-AI-words + /ban-the-AI-patterns — strip AI-rhythm phrasing, banned words (delve, crucial, tapestry, etc.), and "it's not X, it's Y" constructions.
+/editor — cut anything that doesn't earn its place. Tighten.
+/red-pen — flag weak sentences before I have to.
+/humanizer as a final pass.
+
+Stop after each section and show me the result plus the self-critique. Wait for my go-ahead before moving to the next section — do not draft the whole report in one pass.
+
+Style constraints (apply throughout, via /auto-block-banned-words)
+No invented statistics, no invented quotes, no invented citations.
+If a number isn't in the results files or the papers, say so — don't interpolate or round to something that "sounds right."
+Match my writing voice (I'll share sample writing if needed for /sound-like-your-posts).
+Every section leads with the takeaway sentence, then the evidence.
+
+

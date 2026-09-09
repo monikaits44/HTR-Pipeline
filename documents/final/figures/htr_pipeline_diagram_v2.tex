@@ -1,0 +1,104 @@
+% =============================================================================
+% HTR-Pipeline: Overall Concept / Workflow Diagram (v2)
+% -----------------------------------------------------------------------------
+% v2 differences vs. htr_pipeline_diagram.tex:
+%   - Uses an ACTUAL IAM sample line image as the pipeline input (not a text box)
+%   - Shows concrete, dataset-verified outputs at the end of each branch
+%     (predicted transcription vs. ground truth; qualitative attention effect)
+%     instead of an abstract illustrative attention matrix
+%   - Fewer nodes / flatter branches for a simpler, cleaner research figure
+%
+% Compile standalone:   pdflatex htr_pipeline_diagram_v2.tex
+% Requires: sample_input.png (copy of notebook/sample_images/a01-038-12.png)
+%           in the same directory as this .tex file.
+% =============================================================================
+\documentclass[tikz,border=6pt]{standalone}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\graphicspath{{./}}
+\usetikzlibrary{arrows.meta, positioning, shapes.geometric, fit, backgrounds, calc}
+
+\begin{document}
+\begin{tikzpicture}[
+  font=\sffamily,
+  every node/.style={align=center},
+  arr/.style={-{Stealth[length=2.3mm, width=1.8mm]}, thick, draw=black!70},
+  box/.style={rectangle, rounded corners=2pt, draw=black!65, line width=0.6pt,
+              minimum height=1.05cm, text width=5.35cm, inner sep=4pt, font=\sffamily\small},
+  data/.style   ={box, fill=black!5},
+  cnn/.style    ={box, fill=blue!10, draw=blue!55!black},
+  reg/.style    ={box, text width=4.1cm, fill=orange!16, draw=orange!70!black},
+  trans/.style  ={box, minimum height=1.4cm, fill=violet!10, draw=violet!55!black},
+  ctc/.style    ={box, text width=5.0cm, fill=green!10, draw=green!45!black},
+  attn/.style   ={box, text width=5.0cm, fill=teal!10, draw=teal!65!black},
+  down/.style   ={box, text width=5.0cm, minimum height=1.15cm, fill=purple!8, draw=purple!55!black},
+  merge/.style  ={circle, draw=black!70, line width=0.6pt, fill=white, minimum size=6mm, font=\small},
+  junction/.style={circle, fill=black!70, minimum size=1.6mm, inner sep=0pt},
+]
+
+% ---------------------------------------------------------------- main spine
+\node[data, minimum height=1.7cm, text width=5.6cm] (input) at (0,13.0)
+  {\includegraphics[width=3.6cm]{sample_input.png}\\[2pt]
+   \textbf{Input: IAM line image} (\texttt{a01-038-12})\\ raw crop $\to$ $128\times1024$ px, grayscale};
+
+\node[data]  (prep)  at (0,11.15) {\textbf{Preprocessing \& Augmentation}\\[1pt] resize $\cdot$ invert $\cdot$ pad $\to$ albumentations};
+
+\node[cnn]   (stem)  at (0,8.8)  {\textbf{CNN Stem} (4 conv layers)\\[1pt] $\rightarrow$ patch tokens $X_p\in\mathbb{R}^{128\times256}$};
+\node[reg]   (regs)  at (4.55,8.8) {\textbf{Register Tokens} $R$\\[1pt] learnable, $R\in\{0,2,4,8,16\}$\\ \emph{(Darcet et al., 2023)}};
+
+\node[merge] (concat) at (0,7.1)  {$\oplus$};
+\node[trans] (transf) at (0,5.3)  {\textbf{Transformer Encoder}\\[1pt] depth$=6$, heads$=8$, $d=256$\\ self-attention over $[R\,\|\,\text{patches}]$};
+
+% ----------------------------------------------------- core-contribution box
+\begin{scope}[on background layer]
+  \node[draw=black!45, dashed, line width=0.7pt, rounded corners=4pt,
+        fit=(stem)(regs)(concat)(transf), inner sep=7pt,
+        label={[font=\small\sffamily\bfseries, black!55]above:Core Contribution: Register-Augmented ViT-RGTS Backbone}] (backbone) {};
+\end{scope}
+
+% -------------------------------------------------------------- arrows spine
+\draw[arr] (input) -- (prep);
+\draw[arr] (prep)  -- (stem);
+\draw[arr] (stem)  -- (concat);
+\draw[arr] (regs)  -- (concat);
+\draw[arr] (concat)-- (transf);
+
+% ------------------------------------------------------------------ branches
+\node[junction] (split) at (0,3.4) {};
+\draw[arr] (transf) -- (split);
+
+\node[ctc]  (ctchead) at (-3.55,2.0) {\textbf{CTC Head}\\[1pt] BiLSTM$\times$3 + CNN shortcut (dual supervision)};
+\node[attn] (aextract) at (3.55,2.0) {\textbf{Attention Extraction}\\[1pt] \texttt{forward\_explain}: $A\in\mathbb{R}^{L\times H\times S\times S}$};
+
+\draw[arr] (split) -| (ctchead);
+\draw[arr] (split) -| (aextract);
+
+% -------------------------------------------------------- concrete outputs
+\node[ctc, minimum height=1.9cm] (recout) at (-3.55,-0.65)
+  {\textbf{Output: Decoded Transcription}\\[3pt]
+   Ground truth: \textit{``talks.''}\quad Prediction: \textit{``talks.''}\\[2pt]
+   \footnotesize Test set (IAM): CER 4.5--5.7\% $\cdot$ WER 15--19\%};
+
+\node[attn, minimum height=1.9cm] (explout) at (3.55,-0.65)
+  {\textbf{Output: Character-Localized Attention}\\[3pt]
+   \includegraphics[width=2.5cm]{sample_input.png}\\[2pt]
+   \footnotesize registers absorb global context $\to$ sharper, less entropic per-character focus};
+
+\draw[arr] (ctchead)  -- (recout);
+\draw[arr] (aextract) -- (explout);
+
+\node[down] (downstream) at (3.55,-3.15)
+  {\textbf{Downstream Applications}\\[1pt] writer identification (VLAC) $\cdot$ forensic / archival document analysis};
+\draw[arr] (explout) -- (downstream);
+
+% ---------------------------------------------------------------------- legend
+\begin{scope}[shift={(0.4,-4.9)}]
+  \foreach \i/\col/\lbl in {0/black!5/Data, 1/blue!10/Backbone, 2/orange!16/Registers,
+                            3/violet!10/Transformer, 4/green!10/Recognition, 5/teal!10/Explainability, 6/purple!8/Downstream} {
+    \node[rectangle, draw=black!50, line width=0.5pt, fill=\col, minimum width=3.2mm, minimum height=3.2mm] at (-6.6+1.95*\i,0) {};
+    \node[font=\tiny\sffamily, anchor=west] at (-6.6+1.95*\i+0.25,0) {\lbl};
+  }
+\end{scope}
+
+\end{tikzpicture}
+\end{document}

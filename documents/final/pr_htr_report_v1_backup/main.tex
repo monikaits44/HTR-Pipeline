@@ -1,0 +1,96 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{graphicx}
+\usepackage{textcomp}
+\usepackage{xcolor}
+\usepackage{cite}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{multirow}
+\usepackage{url}
+\usepackage[margin=2.0cm]{geometry}
+\usepackage[hidelinks]{hyperref}
+\usepackage{setspace}
+\usepackage{caption}
+\captionsetup{font=small,labelfont=bf,skip=4pt}
+\usepackage{titlesec}
+\titlespacing*{\section}{0pt}{0.8em}{0.35em}
+\titlespacing*{\subsection}{0pt}{0.6em}{0.25em}
+\titlespacing*{\subsubsection}{0pt}{0.4em}{0.15em}
+\setlength{\parskip}{2pt}
+\setlength{\textfloatsep}{6pt plus 2pt minus 2pt}
+\setlength{\intextsep}{6pt plus 2pt minus 2pt}
+\setlength{\floatsep}{6pt plus 2pt minus 2pt}
+\setlength{\abovecaptionskip}{2pt}
+\setlength{\belowcaptionskip}{2pt}
+\linespread{0.96}
+\selectfont
+
+\graphicspath{{./figures/}}
+
+\newcommand{\ie}{\textit{i.e.}}
+\newcommand{\eg}{\textit{e.g.}}
+\newcommand{\etal}{\textit{et al.}}
+
+\begin{document}
+
+% ==================== COVER PAGE ====================
+\begin{titlepage}
+\centering
+\vspace*{0.5cm}
+
+\begin{minipage}{0.42\linewidth}
+\centering
+\includegraphics[height=3cm]{logo/FAU_Logo.png}
+\end{minipage}\hfill
+\begin{minipage}{0.42\linewidth}
+\centering
+\includegraphics[height=3cm]{logo/PR_Lab_Logo.png}
+\end{minipage}
+
+\vspace{1.6cm}
+{\large Master's Project at the Pattern Recognition Lab}\\[1cm]
+
+{\LARGE\bfseries Improving HTR Attention Maps with Register Tokens}\\[0.4em]
+{\large\itshape A CTC Vision Transformer for Interpretable Handwritten Text Recognition}\\[2cm]
+
+{\large Monika Radhakisan Chavan}\\[0.3em]
+{\normalsize M.Sc.\ Artificial Intelligence}\\
+{\normalsize Friedrich-Alexander-Universit\"{a}t Erlangen-N\"{u}rnberg}\\
+{\normalsize Matriculation No.\ 23288066}\\[1.6cm]
+
+{\normalsize Supervisor}\\
+{\large Prof.\ Vincent Christlein}\\
+{\normalsize Pattern Recognition Lab, FAU Erlangen-N\"{u}rnberg}\\[2.5cm]
+
+{\normalsize \today}
+
+\end{titlepage}
+
+% ==================== ABSTRACT PAGE ====================
+\newpage
+\input{sections/abstract}
+
+% ==================== TABLE OF CONTENTS ====================
+\newpage
+\tableofcontents
+\newpage
+
+% ==================== MAIN SECTIONS ====================
+\input{sections/introduction}
+\input{sections/related_work}
+\input{sections/methodology}
+\input{sections/experiments}
+\input{sections/results}
+\input{sections/discussion}
+\input{sections/conclusion}
+
+% ==================== REFERENCES ====================
+\bibliographystyle{plain}
+\bibliography{references}
+
+\end{document}

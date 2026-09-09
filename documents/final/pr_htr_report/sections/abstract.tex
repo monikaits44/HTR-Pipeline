@@ -1,0 +1,11 @@
+\section*{Abstract}
+\addcontentsline{toc}{section}{Abstract}
+
+Handwritten Text Recognition (HTR) on the standard line-level benchmarks is close to saturated on character error rate; a compact CNN--BiLSTM--CTC baseline reaches roughly $4.6\%$ CER on IAM. The open problem is no longer accuracy but attention interpretability, since Vision Transformer (ViT) recognizers produce noisy self-attention maps dominated by a small number of high-norm ``sink'' patch tokens that limit their usefulness for downstream tasks such as writer identification.
+
+This project asks whether the register-token intervention of Darcet~\etal, originally proposed for classification ViTs, transfers to a CTC-based HTR system. I build a CNN-stem Vision Transformer with learnable register tokens (ViT-RGTS) and evaluate register counts $R \in \{0, 2, 4, 8, 16\}$ against a CNN--RNN baseline, a pretrained TorchVision ViT-B/16, and TrOCR, on both IAM and READ2016. Two observations organize the findings. On the recognition axis the register count is neutral within seed noise on both datasets, matching Darcet~\etal's own observation for classification. On the attention axis register tokens visibly reduce the sink pattern and shift the character-attention peak onto the queried character; a residual sink nonetheless survives on patch columns because a CTC self-attention encoder has no dedicated aggregate query separated from the patches. Vision Transformers are also known to be data-hungry, and both benchmarks used here are small by ViT standards, so the partial transfer of the attention claim is consistent with the mechanism being under-driven by training data at HTR-benchmark scale.
+
+The per-character attention visualization of Gurav~\etal\ is reproduced end-to-end on the trained model. The best recognizer overall stays the compact CNN--RNN baseline ($4.62\%$ CER), and the best interpretable recognizer is ViT-RGTS at four registers ($5.55\%$ CER); the small CER gap is the price paid for the attention behaviour that the register mechanism was chosen to deliver.
+
+\vspace{0.4em}
+\noindent\textbf{Keywords:} Handwritten Text Recognition, Vision Transformer, Register Tokens, Attention Interpretability, CTC, IAM, READ2016.

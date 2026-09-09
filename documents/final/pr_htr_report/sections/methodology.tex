@@ -1,0 +1,80 @@
+\section{Methodology}
+\label{sec:methodology}
+
+This section describes the pipeline that produced every result in Section~\ref{sec:results}: the datasets, the four encoder families used, the register mechanism, and the training procedure.
+
+\subsection{Datasets and Preprocessing}
+\label{sec:datasets}
+
+The primary dataset is IAM~\cite{marti2002iam} at the line level, using the Aachen split~\cite{retsinas2024htrbestpractices}: $6{,}482$ training lines, $976$ validation lines, and $2{,}915$ test lines with no writer overlap between train and test. The character vocabulary is $79$ classes plus one CTC blank, giving $80$ output classes.
+
+The generalization test set is READ2016, a historical German handwriting corpus distributed as $8{,}349$, $1{,}040$, and $1{,}138$ train, validation, and test lines respectively, with an $88$-class vocabulary. Its train set is larger than IAM's, its character set is larger, and its script differs from IAM's modern English; together this makes it a useful cross-dataset check on any conclusion reached on IAM. Ground-truth images are provided as RGB JPEGs and are converted to 8-bit grayscale PNGs before use, to avoid a colour-conversion bug in the standard $1 - I/255$ inversion when applied to RGB input.
+
+A synthetic corpus of roughly $950{,}000$ rendered lines is used only for the synthetic-pretraining lane in Section~\ref{sec:res_synth}. Text sampled from CC100 is rendered with $555$ handwritten-style fonts using the pipeline of Nikolaidou~\etal~\cite{nikolaidou2023wordstylist}. It is not central to the register-token question.
+
+All line images are preprocessed to $128 \times 1024$ grayscale tensors following the recipe of Retsinas~\etal~\cite{retsinas2024htrbestpractices}: aspect-ratio-preserving resize, symmetric white padding, per-pixel intensity inversion $\hat I = 1 - I/255$, and per-image standardization. Training-time augmentation follows a moderate profile (small affine transforms, elastic distortion at $p{=}0.5$, mild morphological operations, brightness and contrast jitter) which the augmentation ablation in Section~\ref{sec:res_abl_arch} shows outperforms a more aggressive profile on this dataset size.
+
+\subsection{Model Architecture}
+\label{sec:arch}
+
+The pipeline hosts four encoder families behind a shared interface. Every encoder emits a time-major sequence tensor that the CTC head of Section~\ref{sec:heads} consumes.
+
+\subsubsection{CNN--RNN baseline}
+
+The baseline is the CNN--BiLSTM--CTC network of Retsinas~\etal~\cite{retsinas2024htrbestpractices}: a ResNet-like CNN, column-wise max-pooling to collapse the height axis to a $128$-timestep sequence, and a three-layer BiLSTM (hidden $= 256$). Total parameters: $7.36$M.
+
+\subsubsection{ViT-RGTS (main model)}
+
+The main model is a CNN-stem Vision Transformer with register tokens. A four-layer convolutional stem collapses the $128 \times 1024$ input to a feature map of shape $D \times 1 \times 128$ with $D = 256$; the $128$ column descriptors form the patch-token sequence $p_1, \ldots, p_{128}$. A learnable tensor of $R$ register tokens is prepended to this sequence:
+\begin{equation}
+\label{eq:token_sequence}
+\mathbf{X}^{(0)} = [\mathbf{r}_1, \ldots, \mathbf{r}_R, \mathbf{p}_1, \ldots, \mathbf{p}_{128}] + \mathbf{E}_{\mathrm{pos}}[:S],
+\end{equation}
+where $S = R + 128$ and $\mathbf{E}_{\mathrm{pos}}$ is a learnable positional-embedding table. The register tokens are initialized from $\mathcal{N}(0, 0.02^2)$, matching Darcet~\etal~\cite{darcet2024registers}. When $R = 0$ only the patch tokens enter the encoder.
+
+The encoder is a stack of $L = 6$ standard Transformer blocks~\cite{vaswani2017attention} with $h = 8$ heads, embedding width $D = 256$, feed-forward width $D_{\mathrm{ff}} = 1024$, and dropout $0.1$. The output patch tokens are passed to the CTC head; the register outputs are stored separately for the attention analysis. A parallel forward path exposes the per-layer attention tensors, per-token norms, and register embeddings needed by the interpretability metrics of Section~\ref{sec:attn_eval}. Total parameters: $9.48$M for $R = 4$; each additional register adds $D = 256$ parameters.
+
+The CNN stem is a structural requirement rather than a refinement. It guarantees a strictly left-to-right token order along the width axis, which the CTC monotonic-alignment assumption depends on. Section~\ref{sec:res_abl_arch} shows that removing the stem, so that the encoder falls back to a row-major $16 \times 16$ patch grid, collapses CER by more than an order of magnitude.
+
+\subsubsection{Pretrained comparators}
+
+The first pretrained comparator is TorchVision's ImageNet-pretrained \texttt{vit\_b\_16}~\cite{dosovitskiy2021vit}, adapted to grayscale HTR input via a learnable $1{\times}1$ channel-expansion convolution. Fine-tuning uses a two-group differential learning rate (backbone $2 \times 10^{-5}$, head $5 \times 10^{-4}$). Total parameters: $91.9$M.
+
+The second pretrained comparator is TrOCR-base~\cite{li2023trocr}, whose encoder is pretrained on real handwriting. The decoder is discarded and the encoder feeds a CTC head via aspect-ratio-preserving resize and a lightweight height-pooling adaptor. Fine-tuning uses layer-wise learning-rate decay~\cite{howard2018ulmfit}. Total parameters: $90.4$M.
+
+For the READ2016 comparison a run of HTR-VT~\cite{li2024htrvt} is included as an independently designed CTC ViT external comparator. Total parameters: $8.75$M.
+
+\subsubsection{CTC head}
+\label{sec:heads}
+
+All encoders share a dual-branch CTC head. A three-layer BiLSTM (hidden $= 256$) followed by a linear projection produces the primary character posteriors; a parallel $1{\times}3$ convolution with linear projection produces a shortcut posterior. Both branches are supervised by the CTC loss of Graves~\etal~\cite{graves2006ctc}, combined as
+\begin{equation}
+\label{eq:ctc_loss}
+\mathcal{L} \;=\; \mathcal{L}_{\mathrm{CTC}}\!\bigl(\log p_{\mathrm{rnn}}\bigr) \;+\; \lambda \, \mathcal{L}_{\mathrm{CTC}}\!\bigl(\log p_{\mathrm{cnn}}\bigr),
+\end{equation}
+with $\lambda = 0.1$. At inference only the BiLSTM branch is decoded via greedy best-path collapse. The dual-branch construction follows the auxiliary shortcut of Retsinas~\etal~\cite{retsinas2024htrbestpractices} and is used across all four encoder families.
+
+\subsubsection{Pipeline overview}
+
+Figure~\ref{fig:pipeline} summarizes the end-to-end pipeline. A line image passes through preprocessing, one of the four encoder families, and the CTC head; the same forward pass exposes the register tokens and attention tensors used by the interpretability analysis.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.5\linewidth]{htr_pipeline_diagram}
+\caption{End-to-end HTR pipeline with register tokens prepended to the patch-token sequence.}
+\label{fig:pipeline}
+\end{figure}
+
+\subsection{Training and Fine-Tuning}
+\label{sec:training}
+
+From-scratch models (CNN--RNN, ViT-RGTS, HTR-VT) use AdamW~\cite{loshchilov2019adamw} with weight decay $5 \times 10^{-4}$ and a differential learning-rate policy: CNN stem and CTC head at $1 \times 10^{-3}$, Transformer body at $5 \times 10^{-4}$. A five-epoch linear warmup is followed by cosine annealing to $10^{-6}$. All runs use $150$ epochs, seed $42$, and cuDNN in deterministic mode (\texttt{torch.backends.cudnn.deterministic=True}), with an effective batch of $32$ (physical $8$, accumulation $\times 4$) and gradient clipping at $\ell_2$-norm $5$. The best-validation-CER epoch is retained for evaluation.
+
+Pretrained models require a different treatment because a naive uniform learning rate destabilizes the pretrained weights (Section~\ref{sec:res_finetune}). Three strategies are supported. Two-group differential LR uses a uniform low learning rate on the backbone and a higher one on the head, and is used for ImageNet-pretrained ViT-B/16. Layer-wise learning-rate decay~\cite{howard2018ulmfit}, with $\eta_\ell = \eta_{\mathrm{base}} \cdot \gamma^{L-\ell}$ and $\gamma = 0.9$, is used for TrOCR. Gradual unfreezing is included for completeness and fails for both models at the epoch budgets tested.
+
+A stochastic weight-averaging (SWA) variant~\cite{izmailov2018swa} is trained in parallel for every family. From epoch $110$ of $150$ an averaged shadow model accumulates a running mean of the weights while the live network's learning rate is held constant via SWALR. Because the SWA-averaged model's evaluation is done after a separate BatchNorm-recalibration pass, its CER differs from the CER of the live network at the same epoch. Both numbers are collected, and only the SWA-averaged evaluation is reported for SWA-enabled runs.
+
+\subsection{Implementation and Hardware}
+\label{sec:impl}
+
+The pipeline is implemented in PyTorch~2.1 with mixed-precision AMP for the ViT models. All experiments ran on the NHR@FAU cluster (RTX~3080 partition, $10$~GB VRAM, $8$~CPU cores). A single $150$-epoch IAM run takes roughly $5$ to $7$ hours for CNN--RNN, $9$ to $11$ hours for ViT-RGTS, and $20$ to $28$ hours for the fine-tuned pretrained lanes. Attention weights, register embeddings, and per-token norms are saved only for the best-validation checkpoint per run to keep storage bounded.

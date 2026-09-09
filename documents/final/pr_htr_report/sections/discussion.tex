@@ -1,0 +1,37 @@
+\section{Discussion}
+\label{sec:discussion}
+
+The results support a compact set of interpretations that generalize beyond the specific runs that produced them.
+
+\subsection{Registers Change Attention Structure Without Changing Recognition}
+\label{sec:disc_registers}
+
+The register-token intervention was designed and validated on classification ViTs, where the accuracy-neutrality claim and the attention-cleanliness claim were two sides of one experiment. Section~\ref{sec:res_claim} shows that the two claims separate in the CTC HTR setting. Recognition neutrality carries over cleanly on both IAM and READ2016 within the seed-noise floor. Attention cleanliness carries over partially: entropy drops, spatial ordering improves, and more heads align to left-to-right reading, but the token-norm asymmetry that would signal registers absorbing sinks in a classification ViT is inverted here. Patch tokens remain the higher-norm carriers of the sink information, and Figure~\ref{fig:register_effect} shows the surviving lobe qualitatively.
+
+The mechanistic explanation is structural. A CTC self-attention encoder has no CLS-style aggregate query, so a patch token that has developed high norm is simultaneously a query and a key of the sink pattern. Registers cannot dissolve that self-consistency by absorbing only the query side. This is a testable prediction: adding an aggregate query, for example a CLS token supervised by a light auxiliary loss such as writer classification, should let registers take over the global-information role more completely and flip the token-norm asymmetry to the classification-ViT direction.
+
+A second, complementary interpretation is that ViTs are data-hungry and the training sets used here are small. It is plausible that at substantially larger training scale the register mechanism reaches the full sink-absorption regime Darcet~\etal\ observe on ImageNet-scale classification data. Nothing in the results contradicts this reading, and both interpretations point to the same class of extensions laid out in Section~\ref{sec:conclusion}.
+
+The practical takeaway for HTR practitioners is straightforward. For minimum CER on benchmark-scale data, register tokens are neither a benefit nor a harm; the extra parameters are essentially free but do not move the recognition needle. For interpretable attention supporting a downstream task, $R = 4$ or $R = 8$ is the sweet spot on the entropy and ordering metrics, and the residual sink pattern is best suppressed at inference time via a CTC-column prior on the raw attention as described in Section~\ref{sec:attn_eval}.
+
+\subsection{The CNN Stem is a Structural Requirement}
+\label{sec:disc_cnnstem}
+
+Two independent configurations, the legacy row-major patch layout and the no-CNN-stem ablation, both collapse to roughly $73\%$ CER (Table~\ref{tab:ablations}). Every other ablation in the matrix moves CER by at most a few percent; these two move it by more than $67$ percentage points. The mechanism is not architectural finesse but a hard constraint. CTC's monotonic-alignment assumption requires the token sequence entering the CTC head to be strictly left-to-right in reading order, and a row-major 2D-patch flattening violates that by interleaving vertical position into the sequence. Whichever mechanism collapses the 2D patch grid to a 1D reading-order sequence, whether a CNN stem with height pooling, an adaptive max-pool as in HTR-VT~\cite{li2024htrvt}, or an explicit column-attention pool, is load-bearing. Register count, embedding width, and encoder depth are secondary: a wrong token order alone destroys the model.
+
+\subsection{SWA and Fine-Tuning Strategy are Orthogonal Levers}
+\label{sec:disc_swa_ft}
+
+Two training-side levers move CER independently. Stochastic Weight Averaging~\cite{izmailov2018swa} adds a $0.26$ to $0.39\%$ improvement to any run whose loss trajectory has settled into a flat basin by the SWA start epoch. The signal for whether SWA will help is available directly from the training log: if the CTC loss has plateaued and the CER curve has stopped improving materially in the fifteen epochs before the SWA start, SWA is safe to enable; otherwise it is not (Section~\ref{sec:res_finetune}).
+
+The fine-tuning strategy for pretrained models is a second, independent lever. The five-fold error-rate improvement from naive uniform LR to two-group LR on ViT-B/16 is entirely attributable to the LR-grouping decision. The winning strategy depends on the pretrained-representation to target-domain gap. Two-group LR wins for large domain gaps (ImageNet to handwriting), layer-wise LR decay wins for small domain gaps (TrOCR encoder pretrained on handwriting), and gradual unfreezing fails in both regimes at the epoch budgets tested.
+
+\subsection{Synthetic Handwriting is Not a Free Substitute for IAM}
+\label{sec:disc_synth}
+
+The synthetic pretraining lane compresses a clear lesson. Models reach near-perfect accuracy on synthetic validation but $30$ to $46\%$ CER on real IAM test, and the gap is the render-to-real distribution shift: no ink bleed, no writer-specific letterforms, no paper texture, no scanning artifacts. The rendering pipeline of Nikolaidou~\etal~\cite{nikolaidou2023wordstylist} does what it was designed for, but its outputs are not a drop-in substitute for IAM training data for a from-scratch encoder. A curriculum that pretrains on synthetic and fine-tunes on real IAM is the natural follow-up and is listed as an extension in Section~\ref{sec:conclusion}.
+
+\subsection{Limitations}
+\label{sec:disc_limits}
+
+Three limitations bound the claims of this report. The interpretability half of the register-token claim is measured by attention-quality metrics on a small evaluation sample and by one qualitative reproduction, not by an end-to-end downstream evaluation such as writer identification; a full VLAC~\cite{raven2025vlac} pipeline is out of scope for the project's time budget. All findings are at IAM and READ2016 scale (between $6$K and $8$K training lines), and the register-count-versus-CER curve could become non-flat at substantially larger scales, which the current results cannot rule out. Finally, all CER numbers use greedy CTC decoding; language-model-augmented beam-search decoding would lower every reported CER but is unlikely to change the register-count ordering.

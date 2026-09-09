@@ -1,0 +1,52 @@
+\section{Related Work}
+\label{sec:related_work}
+
+The problem of ink detection in Herculaneum papyri draws upon several distinct research areas: the historical study of the scrolls themselves, non-invasive imaging of cultural heritage artifacts, volumetric feature extraction from CT data, and deep learning architectures for 2D and 3D segmentation. This section surveys each area and positions our contribution within the broader landscape.
+
+\subsection{Herculaneum Papyri and Non-Invasive Reading}
+
+The Herculaneum scrolls were discovered in 1752 during excavations of the Villa dei Papiri, yielding approximately 1,100-1,800 carbonized papyrus fragments representing around 800 original rolls~\cite{janko2002herculaneum}. Early mechanical unrolling attempts by Antonio Piaggio (1753-1756) using a custom silk-thread machine recovered text fragments, but the process took years per scroll with high fragmentation rates, often destroying the very material it sought to preserve~\cite{parsons1936, seales2023neh}. By the late 20th century, attention shifted to non-invasive techniques.
+
+Seales and colleagues pioneered virtual unrolling of Herculaneum scrolls using X-ray CT scanning and computational geometry techniques including surface segmentation, mesh extraction, and texture flattening~\cite{seales2005digital}. The EduceLab-Scrolls dataset~\cite{seales2023educelab} formalized this pipeline, providing 176 surface segments for Scroll~1 (PHerc.Paris.4) with multi-layer depth volumes at 7.91~\textmu m isotropic voxel resolution~\cite{scrollprize2023data}.
+
+Mocella et al.~\cite{mocella2015revealing} demonstrated that X-ray phase-contrast tomography could reveal ink traces on Herculaneum papyri, leveraging the slight density difference between carbon-based ink and carbonized papyrus. However, their approach required synchrotron-quality scans and was limited to small fragments. Bukreeva et al.~\cite{bukreeva2016virtual} extended this line of work, showing that propagation-based phase-contrast tomography could detect ink without the need for phase-retrieval algorithms, and identifying that metal-rich inks (containing lead or copper) produced stronger CT signals than pure carbon inks.
+
+Liu et al.~\cite{liu2024ink} investigated ink detection from surface topography rather than volumetric density, demonstrating that microscale surface deformations caused by ink application could serve as an alternative detection modality. This approach is complementary to depth-based methods and may be particularly relevant for scrolls where the ink lacks metallic components.
+
+\subsection{The Vesuvius Challenge and Competition Solutions}
+
+The Vesuvius Challenge~\cite{vesuvius2023challenge} established a competitive framework for developing ink detection methods, providing open CT data, segmentation tools, and evaluation metrics. The challenge catalyzed rapid progress: within months, multiple teams achieved partial text recovery from intact scrolls.
+
+The Grand Prize winning solution~\cite{nader2024gp, naderink2024blog} employed a TimeSformer~\cite{bertasius2021timesformer} architecture, originally designed for video classification, adapted to treat Z-layers as video frames. The model uses divided space-time attention to learn cross-layer dependencies across the depth dimension. Key innovations included iterative label curation (15 rounds of manual refinement), Z-axis data augmentation (random flipping, shifting, and layer dropout), and Gaussian-weighted tile reassembly for seamless full-resolution predictions. Specific training hyperparameters (batch size, epochs, layer range) were not formally published by the winning team.
+
+A notable follow-up by Landau~\cite{landau2024gpplus} (Vesuvius-Grandprize-Winner-Plus) refactored the original codebase with improved CLI configurability, exposing layer selection parameters (\texttt{--start}, \texttt{--num\_layers}) as command-line arguments, which facilitated the systematic experiments in this work.
+
+\subsection{Volumetric Learning and 3D Feature Extraction}
+
+The treatment of Z-layers in ink detection relates closely to volumetric learning methods developed for medical imaging and video understanding.
+
+\subsubsection{3D Convolutional Approaches}
+
+3D convolutional neural networks~\cite{ji20133d, tran2015c3d} process volumetric data by extending 2D convolutions along the depth axis, enabling joint spatial-depth feature extraction. In medical imaging, 3D U-Nets~\cite{cicek20163d} and V-Nets~\cite{milletari2016vnet} have become standard for volumetric segmentation tasks such as organ delineation in CT and MRI. However, 3D convolutions are computationally expensive, scaling cubically with kernel size, and require substantial GPU memory constraint particularly relevant when processing large CT volumes of scrolls.
+
+\subsubsection{2.5D and Multi-Slice Approaches}
+
+An intermediate strategy, commonly termed ``2.5D,'' treats adjacent slices as input channels to a 2D network~\cite{roth2014new, xia2018bridging}. This approach captures local depth context without the full computational burden of 3D convolutions. In the context of ink detection, treating each Z-layer as an input channel to a 2D segmentation network (as done by the U-Net in our work) is a direct application of this paradigm. The key limitation is that channel-wise convolution treats all depth layers symmetrically, without inherent ordering awareness.
+
+\subsubsection{Temporal Attention for Depth Modeling}
+
+TimeSformer~\cite{bertasius2021timesformer} factorizes full space-time attention into separate spatial attention (within each Z-layer) and temporal attention (across Z-layers), reducing memory while explicitly modeling depth dependencies. In the ink detection context, each Z-layer is treated as a frame, enabling the model to learn which cross-layer relationships carry ink signal information.
+
+\subsection{Segmentation Architectures}
+
+The U-Net architecture~\cite{ronneberger2015unet}, originally developed for biomedical image segmentation, has become the effective standard for dense prediction tasks. Its encoder-decoder structure with skip connections enables both global context capture and fine-detail preservation. Modern variants, implemented in libraries such as \texttt{segmentation-models-pytorch}~\cite{iakubovskii2019smp}, combine U-Net decoders with powerful pre-trained encoders (EfficientNet~\cite{tan2019efficientnet}, ResNet~\cite{he2016resnet}) to achieve strong performance with limited domain-specific training data.
+
+EfficientNet~\cite{tan2019efficientnet}, used as the backbone in our U-Net model, employs compound scaling to jointly optimize network width, depth, and input resolution. Combined with ImageNet pre-training, it provides robust feature extraction that transfers effectively to grayscale CT data despite the significant domain gap.
+
+\subsection{Pseudo-Label Training}
+
+Our use of pseudo-labels generated by the Grand Prize winning model to train ablation models relates to the broader literature on knowledge distillation~\cite{hinton2015distilling} and semi-supervised learning~\cite{lee2013pseudo}. In this paradigm, a strong ``teacher'' model generates soft or hard predictions that serve as training targets for ``student'' models. The key assumption is that the teacher's predictions are sufficiently accurate to provide useful supervision, even if imperfect. This approach is particularly valuable in our setting, where manual ink annotation is prohibitively expensive and requires domain expertise in papyrology.
+
+\subsection{Positioning of This Work}
+
+Our work occupies a unique position at the intersection of cultural heritage science and deep learning methodology. Unlike prior work that focused on developing new detection architectures or improving scanning technology, we systematically investigate a fundamental \emph{data representation} question: how should volumetric depth information be sampled and presented to the model? This perspective is closest to the ``2.5D vs.\ 3D'' debate in medical imaging~\cite{xia2018bridging}, but applied to a novel domain with distinctive challenges (carbonized papyrus, sub-voxel ink signals, variable surface geometry). Our code forensics approach reverse-engineering competition solutions into documented scientific baselines also represents a methodological contribution applicable to domains where open-source competitions produce high-performing but poorly documented solutions.
