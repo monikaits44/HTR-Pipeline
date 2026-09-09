@@ -68,14 +68,13 @@ Thumbs.db
 archive/
 asset/
 data/
-documents/
 evaluation_execution/logs/
 experiments_execution/
 external/
 logs/
 saved_models/
 scripts/
-
+documents/backup_documents
 # Root-level artefacts that live only in the workspace ------------------------
 letter2index.json
 index2letter.json

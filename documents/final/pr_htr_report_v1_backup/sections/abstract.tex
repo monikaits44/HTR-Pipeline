@@ -1,9 +1,0 @@
-\section*{Abstract}
-\addcontentsline{toc}{section}{Abstract}
-
-Handwritten Text Recognition (HTR) on standard benchmarks is close to saturated on character error rate; a compact CNN--BiLSTM--CTC baseline reaches roughly $4.6\%$ CER on IAM. The open problem is no longer accuracy but \emph{attention interpretability}: Vision Transformer (ViT) recognizers produce noisy self-attention maps dominated by a small number of high-norm ``sink'' patch tokens, which limits their usefulness for downstream tasks such as writer identification.
-
-This project asks whether the register-token intervention of Darcet~\etal, originally proposed for classification ViTs, transfers to a CTC-based HTR system. I build a CNN-stem Vision Transformer with learnable register tokens (ViT-RGTS) and evaluate register counts $R \in \{0, 2, 4, 8, 16\}$ against a CNN--RNN baseline, a pretrained TorchVision ViT-B/16, and TrOCR, on IAM and READ2016. Two findings emerge. First, on the recognition axis the register count is neutral within seed noise on both datasets, matching Darcet~\etal's own observation for classification. Second, on the attention axis register tokens visibly reduce the sink pattern and shift the character-attention peak onto the queried character, but a residual sink survives on patch columns because a CTC self-attention encoder has no dedicated aggregate query separated from the patches. The visualization style of Nikolaidou~\etal\ is reproduced end-to-end on this model. The best recognizer overall stays the compact CNN--RNN baseline ($4.62\%$ CER), while the best interpretable recognizer is ViT-RGTS at four registers ($5.55\%$ CER); this small CER cost is the price paid for the attention behaviour that the mechanism was chosen to deliver.
-
-\vspace{0.4em}
-\noindent\textbf{Keywords:} Handwritten Text Recognition, Vision Transformer, Register Tokens, Attention Interpretability, CTC, IAM, READ2016.
